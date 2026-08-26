@@ -1,6 +1,7 @@
 const LIB_KEY = "english-study-library-v1";
 const LOG_KEY = "english-study-logs-v1";
 const SCHEDULE_KEY = "english-study-schedule-v1";
+const MODE_KEY = "english-study-practice-mode-v1";
 
 const seed = [
   {
@@ -160,6 +161,7 @@ const state = {
   view:"home",
   filter:"全部",
   query:"",
+  practiceMode:localStorage.getItem(MODE_KEY)==="spelling" ? "spelling" : "cards",
   session:null
 };
 
@@ -182,6 +184,7 @@ function persist() {
   localStorage.setItem(LIB_KEY, JSON.stringify(state.items));
   localStorage.setItem(LOG_KEY, JSON.stringify(state.logs));
   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(state.schedule));
+  localStorage.setItem(MODE_KEY, state.practiceMode);
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[&<>"']/g, function(char) {
@@ -463,27 +466,89 @@ function resetItemProgress(itemId) {
   if (state.session && state.session.itemId===itemId) state.session=null;
   persist(); render(); notify("学习进度已重置");
 }
+function reviewActionMarkup(session) {
+  if (session.feedback === "forgot") return '<div class="review-buttons"><button data-next>下一个</button></div>';
+  return '<div class="review-buttons"><button data-next>下一个</button><button data-repeat>再来一次</button></div>';
+}
+function escapeRegExp(value) {
+  return String(value).replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&");
+}
+function maskPrompt(context, prompt) {
+  if (!context || !prompt) return context || "";
+  try { return String(context).replace(new RegExp(escapeRegExp(prompt),"ig"),"______"); }
+  catch (error) { return String(context); }
+}
+function normalizeAnswer(value) {
+  return String(value || "").toLowerCase().replace(/[’‘']/g,"").replace(/[-–—]/g," ").replace(/[.!?,;:]+$/g,"").replace(/\s+/g," ").trim();
+}
+function renderReviewCard(current, session) {
+  const answerVisible=Boolean(session && session.phase === "answer");
+  const actions=answerVisible ? reviewActionMarkup(session) : '<div class="review-buttons"><button data-feedback="forgot">不记得</button><button data-feedback="remembered">记得</button></div>';
+  return '<section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+' <span class="review-due">'+escapeHtml(formatDue(current))+'</span></div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
+    (answerVisible ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
+    actions+'</section>';
+}
+function renderSpellingReview(current, session) {
+  const answerVisible=Boolean(session && session.phase === "answer");
+  const header='<div class="review-kind">拼写练习 · '+escapeHtml(current.itemTitle)+' <span class="review-due">'+escapeHtml(formatDue(current))+'</span></div>';
+  if (!answerVisible) return '<section class="review-card spelling-card">'+header+'<div class="spelling-instruction">根据中文释义写出英文</div><div class="spelling-hint-row"><div class="spelling-hint">'+escapeHtml(current.answer)+'</div><button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放参考发音">♪</button></div><div class="review-context spelling-context">'+escapeHtml(maskPrompt(current.context,current.prompt))+'</div><div class="spelling-entry"><input id="spelling-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="输入英文答案"><button class="primary-btn" data-check-spelling>检查答案</button></div></section>';
+  const correct=session.typingCorrect === true;
+  const resultClass=correct ? "typing-correct" : "typing-incorrect";
+  const resultText=correct ? "拼写正确" : "这次不正确";
+  return '<section class="review-card spelling-card">'+header+'<div class="spelling-result '+resultClass+'">'+resultText+'</div><div class="typed-answer">你的答案：'+escapeHtml(session.typedAnswer || "未填写")+'</div><div class="answer">答案：'+escapeHtml(current.prompt)+' <button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+'</div>'+reviewActionMarkup(session)+'</section>';
+}
+function setPracticeMode(mode) {
+  state.practiceMode=mode==="spelling" ? "spelling" : "cards";
+  if (state.session) {
+    state.session.phase="prompt";
+    state.session.feedback=null;
+    state.session.typedAnswer="";
+    state.session.typingCorrect=null;
+  }
+  persist();
+  renderReview();
+  notify(state.practiceMode==="spelling" ? "已切换到拼写练习" : "已切换到翻卡复习");
+}
+function checkSpelling(current) {
+  const input=document.getElementById("spelling-input");
+  const value=input ? input.value.trim() : "";
+  if (!value) { notify("先输入英文答案"); if (input) input.focus(); return; }
+  const session=ensureReviewSession(current);
+  session.typedAnswer=value;
+  session.typingCorrect=normalizeAnswer(value)===normalizeAnswer(current.prompt);
+  recordFeedback(session.typingCorrect ? "remembered" : "forgot", current);
+}
 function renderReview() {
   const list=units();
   const fallbackQueue = dueUnits().length ? dueUnits() : list;
   const session = state.session && state.session.unit ? state.session : null;
   const current=session ? session.unit : fallbackQueue[0];
-  const answerVisible = Boolean(session && session.phase === "answer");
-  const feedback = session && session.feedback;
+  if (!current) {
+    document.getElementById("view-review").innerHTML=head("SPACED REVIEW","还没有 <em>学习卡片</em>。","先从内容库导入或创建学习内容。",'<button class="primary-btn" data-view-link="library">打开内容库</button>')+'<div class="empty">当前没有可练习的内容。</div>';
+    bind();
+    return;
+  }
+  const mode=state.practiceMode==="spelling" ? "spelling" : "cards";
+  const modeSwitch='<div class="mode-switch" role="tablist" aria-label="练习模式"><button class="'+(mode==="cards"?"active":"")+'" data-mode="cards" role="tab" aria-selected="'+(mode==="cards")+'">翻卡复习</button><button class="'+(mode==="spelling"?"active":"")+'" data-mode="spelling" role="tab" aria-selected="'+(mode==="spelling")+'">拼写练习</button></div>';
   const queue = session && Array.isArray(session.queue) ? session.queue.slice(session.index + 1).concat(session.repeats || []) : fallbackQueue;
-  let reviewActions;
-  if (!answerVisible) reviewActions='<div class="review-buttons"><button data-feedback="forgot">不记得</button><button data-feedback="remembered">记得</button></div>';
-  else if (feedback === "forgot") reviewActions='<div class="review-buttons"><button data-next>下一个</button></div>';
-  else reviewActions='<div class="review-buttons"><button data-next>下一个</button><button data-repeat>再来一次</button></div>';
+  const body=mode==="spelling" ? renderSpellingReview(current,session) : renderReviewCard(current,session);
   document.getElementById("view-review").innerHTML =
-    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回想，再选择“不记得”或“记得”；答案会持续显示，不记得的内容会在本轮稍后再次出现。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
-    '<div class="review-layout"><section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+' <span class="review-due">'+escapeHtml(formatDue(current))+'</span></div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
-    (answerVisible ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
-    reviewActions+'</section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+queue.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+" · "+escapeHtml(formatDue(unit))+"</span></div></div>";}).join("")+"</aside></div>";
+    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回想，再选择练习方式；每一次结果都会进入同一套复习调度。",modeSwitch)+
+    '<div class="review-layout">'+body+'<aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+queue.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+" · "+escapeHtml(formatDue(unit))+"</span></div></div>";}).join("")+"</aside></div>";
   bind();
-  document.querySelectorAll("[data-feedback]").forEach(function(button){button.addEventListener("click",function(){recordFeedback(button.dataset.feedback,current);});});
-  document.querySelectorAll("[data-next]").forEach(function(button){button.addEventListener("click",advanceReview);});
-  document.querySelectorAll("[data-repeat]").forEach(function(button){button.addEventListener("click",repeatReview);});
+  document.querySelectorAll("[data-mode]").forEach(function(button){button.addEventListener("click",function(){setPracticeMode(button.dataset.mode);});});
+  if (mode==="spelling" && !(session && session.phase==="answer")) {
+    document.querySelectorAll("[data-check-spelling]").forEach(function(button){button.addEventListener("click",function(){checkSpelling(current);});});
+    const input=document.getElementById("spelling-input");
+    if (input) {
+      input.addEventListener("keydown",function(event){if (event.key==="Enter") checkSpelling(current);});
+      window.setTimeout(function(){input.focus();},0);
+    }
+  } else {
+    document.querySelectorAll("[data-feedback]").forEach(function(button){button.addEventListener("click",function(){recordFeedback(button.dataset.feedback,current);});});
+    document.querySelectorAll("[data-next]").forEach(function(button){button.addEventListener("click",advanceReview);});
+    document.querySelectorAll("[data-repeat]").forEach(function(button){button.addEventListener("click",repeatReview);});
+  }
 }
 function renderStats() {
   const metrics=learningStats();
@@ -512,7 +577,7 @@ function startSession(itemId) {
   const itemUnits=item.units.map(function(unit,index){return Object.assign({},unit,{itemId:item.id,itemTitle:item.title,unitIndex:index});});
   const firstIndex=itemUnits.findIndex(function(unit){return cardSchedule(unit).dueAt<=Date.now();});
   const index=firstIndex < 0 ? 0 : firstIndex;
-  state.session={itemId:item.id,baseQueue:itemUnits.slice(),queue:itemUnits,index:index,unit:itemUnits[index],phase:"prompt",feedback:null,repeats:[],repeatPass:false};
+  state.session={itemId:item.id,baseQueue:itemUnits.slice(),queue:itemUnits,index:index,unit:itemUnits[index],phase:"prompt",feedback:null,repeats:[],repeatPass:false,typedAnswer:"",typingCorrect:null};
   setView("review");
   notify("已进入 "+item.title+" 的学习队列");
 }
@@ -523,7 +588,7 @@ function ensureReviewSession(current) {
   if (state.session && state.session.unit) return state.session;
   const queue=dueUnits().length ? dueUnits() : units();
   const index=Math.max(0,queue.findIndex(function(unit){return sameCard(unit,current);}));
-  state.session={itemId:current.itemId,baseQueue:queue.slice(),queue:queue,index:index,unit:queue[index] || current,phase:"prompt",feedback:null,repeats:[],repeatPass:false};
+  state.session={itemId:current.itemId,baseQueue:queue.slice(),queue:queue,index:index,unit:queue[index] || current,phase:"prompt",feedback:null,repeats:[],repeatPass:false,typedAnswer:"",typingCorrect:null};
   return state.session;
 }
 function recordFeedback(feedback, current) {
@@ -561,6 +626,8 @@ function advanceReview() {
   session.unit=queue[index];
   session.phase="prompt";
   session.feedback=null;
+  session.typedAnswer="";
+  session.typingCorrect=null;
   session.repeatPass=repeatPass;
   renderReview();
 }
@@ -568,6 +635,8 @@ function repeatReview() {
   if (!state.session || !state.session.unit) return;
   state.session.phase="prompt";
   state.session.feedback=null;
+  state.session.typedAnswer="";
+  state.session.typingCorrect=null;
   renderReview();
   notify("再来一次");
 }

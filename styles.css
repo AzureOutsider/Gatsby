@@ -23,3 +23,24 @@ body{font-size:17px;line-height:1.6;letter-spacing:0}
 .form-help{display:block;margin-top:-5px;color:var(--muted);font-size:12px;line-height:1.45}
 .form-grid .compact-textarea{min-height:92px}
 @media(max-width:680px){.card-footer{align-items:flex-start;flex-direction:column;gap:12px}.card-footer .progress-line{width:100%;margin-right:0}.card-actions{width:100%}.card-open{margin-right:auto}}
+
+.mode-switch{display:inline-flex;border:1px solid var(--line);background:var(--paper-2);padding:3px;gap:3px}
+.mode-switch button{border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:13px}
+.mode-switch button:hover{color:var(--ink)}
+.mode-switch button.active{background:var(--ink);color:var(--paper)}
+.spelling-card{justify-content:flex-start}
+.spelling-instruction{color:#bdb7ab;font-size:15px;margin-top:28px}
+.spelling-hint-row{display:flex;align-items:center;gap:12px;margin-top:10px}
+.spelling-hint{color:var(--yellow);font-family:var(--serif);font-size:30px;line-height:1.25}
+.spelling-sound{flex:0 0 auto}
+.spelling-context{margin-top:24px}
+.spelling-entry{display:flex;gap:10px;align-items:stretch;margin-top:28px;max-width:620px}
+.spelling-entry input{flex:1;min-width:0;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:var(--paper);padding:12px 14px;outline:none;font-size:17px}
+.spelling-entry input::placeholder{color:#98958b}
+.spelling-entry input:focus{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(244,201,93,.12)}
+.spelling-result{font-family:var(--serif);font-size:29px;margin-top:34px}
+.typing-correct{color:#8ed3c0}
+.typing-incorrect{color:#f29a89}
+.typed-answer{color:#bdb7ab;font-size:15px;margin-top:9px}
+.spelling-card .answer{display:flex;align-items:center;gap:8px}
+@media(max-width:680px){.page-head .mode-switch{margin-top:18px}.mode-switch button{padding:8px 10px}.spelling-hint{font-size:25px}.spelling-entry{display:grid}.spelling-entry .primary-btn{width:100%}}
