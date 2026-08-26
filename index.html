@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f4efe6">
+<title>English Study · 个人学习工作台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">E<span>/</span>S</div><div><div class="brand-name">English Study</div><div class="brand-sub">personal language lab</div></div></div>
+    <nav class="nav" aria-label="主导航">
+      <button class="nav-item active" data-view="home"><span class="nav-icon">◒</span><span>今日学习</span><span class="nav-count" id="due-count">8</span></button>
+      <button class="nav-item" data-view="library"><span class="nav-icon">▤</span><span>内容库</span></button>
+      <button class="nav-item" data-view="review"><span class="nav-icon">↻</span><span>复习队列</span></button>
+      <button class="nav-item" data-view="stats"><span class="nav-icon">⌁</span><span>学习记录</span></button>
+    </nav>
+    <div class="sidebar-note"><span class="eyebrow">FOCUS NOTE</span><p>把一个词放回它真实出现的句子里，记忆才有落点。</p><div class="mini-rule"></div><span class="side-meta">LOCAL FIRST · NO SOCIAL</span></div>
+    <div class="sidebar-footer"><span class="status-dot"></span> 本地学习空间 <span class="version">v0.1</span></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div class="breadcrumb"><span>PERSONAL LANGUAGE LAB</span><b>/</b><span id="page-kicker">TODAY</span></div><div class="top-actions"><button class="icon-button" id="quick-search" title="搜索内容">⌕</button><button class="avatar" title="个人学习者">L</button></div></header>
+    <div id="view-home" class="view active-view"></div><div id="view-library" class="view"></div><div id="view-review" class="view"></div><div id="view-stats" class="view"></div>
+  </main>
+</div>
+<div id="modal-root"></div><div id="toast-root" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
