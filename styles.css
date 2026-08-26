@@ -15,3 +15,11 @@ body{font-size:17px;line-height:1.6;letter-spacing:0}
 .review-due{display:inline-block;margin-left:8px;color:#b8d9d1;font-size:11px;font-weight:400;letter-spacing:0}
 .stats-box h3{font-size:13px}.stats-box .big{font-family:var(--serif);font-size:48px}.modal-head h2{font-family:var(--serif);font-size:32px}.form-grid label{font-size:14px}.toast{font-size:14px}
 @media(max-width:680px){.page-head h1{font-size:38px}.hero-card h2{font-size:34px}.review-prompt{font-size:31px}.review-context{font-size:16px}.answer{font-size:25px}.section-row h2{font-size:25px}}
+
+.card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.card-icon{width:31px;height:30px;padding:0;border:1px solid var(--line);background:transparent;color:var(--muted);display:grid;place-items:center;font-size:17px;line-height:1}
+.card-icon:hover{border-color:var(--coral);color:var(--coral-dark);background:#fffaf2}
+.card-icon-danger:hover{border-color:#b94b40;color:#b94b40;background:#fff1ee}
+.form-help{display:block;margin-top:-5px;color:var(--muted);font-size:12px;line-height:1.45}
+.form-grid .compact-textarea{min-height:92px}
+@media(max-width:680px){.card-footer{align-items:flex-start;flex-direction:column;gap:12px}.card-footer .progress-line{width:100%;margin-right:0}.card-actions{width:100%}.card-open{margin-right:auto}}

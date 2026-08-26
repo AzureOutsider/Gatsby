@@ -234,6 +234,74 @@ function scheduleCard(unit, rating) {
   state.schedule[key] = next;
   return next;
 }
+function startOfDay(value) {
+  const date=value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  date.setHours(0,0,0,0);
+  return date;
+}
+function dayKey(value) {
+  const date=startOfDay(value);
+  return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+}
+function isMastered(unit) {
+  const current=cardSchedule(unit);
+  return current.reviews>0 && current.lastRating==="know" && current.interval>=1440;
+}
+function itemProgress(item) {
+  if (!item || !item.units || !item.units.length) return 0;
+  const mastered=item.units.filter(function(unit){return isMastered(Object.assign({},unit,{itemId:item.id}));}).length;
+  return Math.round(mastered/item.units.length*100);
+}
+function recentDays() {
+  const today=startOfDay(new Date());
+  const logsByDay={};
+  state.logs.forEach(function(log){
+    const timestamp=new Date(log.at).getTime();
+    if (!Number.isNaN(timestamp)) {
+      const key=dayKey(timestamp);
+      logsByDay[key]=(logsByDay[key] || 0)+1;
+    }
+  });
+  const labels=["日","一","二","三","四","五","六"];
+  return Array.from({length:7},function(_,offset){
+    const date=new Date(today);
+    date.setDate(today.getDate()-6+offset);
+    return {key:dayKey(date),label:labels[date.getDay()],count:logsByDay[dayKey(date)] || 0};
+  });
+}
+function currentStreak() {
+  const days=new Set(state.logs.map(function(log){return dayKey(log.at);}));
+  let cursor=startOfDay(new Date());
+  if (!days.has(dayKey(cursor))) {
+    cursor.setDate(cursor.getDate()-1);
+    if (!days.has(dayKey(cursor))) return 0;
+  }
+  let streak=0;
+  while (days.has(dayKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate()-1);
+  }
+  return streak;
+}
+function learningStats() {
+  const weekStart=startOfDay(new Date());
+  weekStart.setDate(weekStart.getDate()-6);
+  const totalReviews=state.logs.length;
+  const rememberedReviews=state.logs.filter(function(log){return log.rating==="know";}).length;
+  const weekReviews=state.logs.filter(function(log){
+    const timestamp=new Date(log.at).getTime();
+    return !Number.isNaN(timestamp) && timestamp>=weekStart.getTime();
+  }).length;
+  return {
+    totalReviews:totalReviews,
+    rememberedReviews:rememberedReviews,
+    masteredCards:units().filter(isMastered).length,
+    dueCards:dueCount(),
+    weekReviews:weekReviews,
+    streak:currentStreak(),
+    sourceCount:new Set(state.items.map(function(item){return item.type;})).size
+  };
+}
 function notify(message) {
   const root = document.getElementById("toast-root");
   root.innerHTML = '<div class="toast">'+escapeHtml(message)+"</div>";
@@ -295,13 +363,20 @@ function render() {
   if (state.view==="stats") renderStats();
 }
 function renderHome() {
+  const metrics=learningStats();
   const featured=state.items[0];
-  const studied=new Set(state.logs.map(function(log){return log.itemId;})).size;
+  if (!featured) {
+    document.getElementById("view-home").innerHTML=head("TODAY","先放入一份 <em>学习内容</em>。","内容库还是空的，导入单词、歌词、字幕或文章后就可以开始学习。",'<button class="primary-btn" data-view-link="library">打开内容库</button>')+'<div class="empty">还没有学习内容。</div>';
+    bind();
+    return;
+  }
+  const featuredProgress=itemProgress(featured);
+  const streakText=metrics.streak ? "已连续学习 "+metrics.streak+" 天" : "从今天开始第一天";
   document.getElementById("view-home").innerHTML =
     head("WEDNESDAY · 26 AUG 2026","今天，学一点 <em>真正用得上</em> 的英语。","把内容拆成小块，先理解，再回忆，最后让它在几天后重新出现。","")+
-    '<div class="hero-grid"><section class="hero-card"><div><div class="eyebrow" style="color:var(--yellow)">CONTINUE WHERE YOU LEFT OFF</div><h2>'+escapeHtml(featured.title)+'</h2><div class="hero-meta">'+escapeHtml(featured.author)+" · "+featured.units.length+' 个学习单元</div></div><div class="hero-controls"><button class="play-btn" data-speak="'+escapeHtml(featured.units[0].context)+'" title="播放句子">▶</button><div class="hero-progress"><i></i></div><button class="quiet-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" data-start="'+featured.id+'">继续学习</button></div></section><section class="side-card"><div><div class="kicker">TODAY\'S REVIEW</div><h3>复习不是回头，<br>是让记忆留下来。</h3></div><div><div class="stat-big">'+dueCount()+' <small>张卡片待复习</small></div><div class="streak"><span class="fire">◒</span> 已连续学习 '+Math.max(1,Math.min(12,2+Math.floor(state.logs.length/3)))+' 天</div></div></section></div>'+
-    '<div class="metrics"><div class="metric"><div class="metric-label">已掌握词汇</div><div class="metric-value">'+(42+state.logs.filter(function(log){return log.rating==="know";}).length)+'</div></div><div class="metric"><div class="metric-label">学习内容</div><div class="metric-value">'+state.items.length+'</div></div><div class="metric"><div class="metric-label">本周学习</div><div class="metric-value">'+(18+state.logs.length)+' <small>分钟</small></div></div><div class="metric"><div class="metric-label">学习来源</div><div class="metric-value">'+new Set(state.items.map(function(item){return item.type;})).size+' <small>类</small></div></div></div>'+
-    '<div class="section-row"><h2>接下来学什么</h2><a data-view-link="library">查看全部内容 →</a></div><div class="content-list">'+state.items.slice(0,4).map(function(item,index){return '<div class="content-row"><div class="content-index">0'+(index+1)+'</div><div><div class="content-title">'+escapeHtml(item.title)+'</div><div class="content-sub">'+escapeHtml(item.author)+" · "+item.units.length+' 个单元</div></div><span class="content-tag">'+escapeHtml(item.type)+'</span><div class="progress-mini"><i style="width:'+item.progress+'%"></i></div><span class="row-arrow" data-start="'+item.id+'">→</span></div>';}).join("")+"</div>";
+    '<div class="hero-grid"><section class="hero-card"><div><div class="eyebrow" style="color:var(--yellow)">CONTINUE WHERE YOU LEFT OFF</div><h2>'+escapeHtml(featured.title)+'</h2><div class="hero-meta">'+escapeHtml(featured.author)+" · "+featured.units.length+' 个学习单元</div></div><div class="hero-controls"><button class="play-btn" data-speak="'+escapeHtml(featured.units[0].context)+'" title="播放句子">▶</button><div class="hero-progress"><i style="width:'+featuredProgress+'%"></i></div><button class="quiet-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" data-start="'+featured.id+'">继续学习</button></div></section><section class="side-card"><div><div class="kicker">TODAY\'S REVIEW</div><h3>复习不是回头，<br>是让记忆留下来。</h3></div><div><div class="stat-big">'+metrics.dueCards+' <small>张卡片待复习</small></div><div class="streak"><span class="fire">◒</span> '+streakText+'</div></div></section></div>'+
+    '<div class="metrics"><div class="metric"><div class="metric-label">已掌握卡片</div><div class="metric-value">'+metrics.masteredCards+'</div></div><div class="metric"><div class="metric-label">学习内容</div><div class="metric-value">'+state.items.length+'</div></div><div class="metric"><div class="metric-label">本周复习</div><div class="metric-value">'+metrics.weekReviews+' <small>次</small></div></div><div class="metric"><div class="metric-label">学习来源</div><div class="metric-value">'+metrics.sourceCount+' <small>类</small></div></div></div>'+
+    '<div class="section-row"><h2>接下来学什么</h2><a data-view-link="library">查看全部内容 →</a></div><div class="content-list">'+state.items.slice(0,4).map(function(item,index){return '<div class="content-row"><div class="content-index">0'+(index+1)+'</div><div><div class="content-title">'+escapeHtml(item.title)+'</div><div class="content-sub">'+escapeHtml(item.author)+" · "+item.units.length+' 个单元</div></div><span class="content-tag">'+escapeHtml(item.type)+'</span><div class="progress-mini"><i style="width:'+itemProgress(item)+'%"></i></div><span class="row-arrow" data-start="'+item.id+'">→</span></div>';}).join("")+"</div>";
   bind();
 }
 function renderLibrary() {
@@ -312,12 +387,81 @@ function renderLibrary() {
   document.getElementById("view-library").innerHTML =
     head("CONTENT LIBRARY","你的英语内容，<em>不止一种来源</em>。","歌曲、单词书、影视台词和自定义文本都可以进入同一套学习与复习节奏.",'<button class="primary-btn" id="open-import">＋ 导入内容</button>')+
     '<div class="library-tools"><input class="search-field" id="library-search" placeholder="搜索标题、来源或主题" value="'+escapeHtml(state.query)+'">'+types.map(function(type){return '<button class="filter-btn '+(state.filter===type?"active":"")+'" data-filter="'+type+'">'+type+"</button>";}).join("")+"</div>"+
-    (visible.length ? '<div class="library-grid">'+visible.map(function(item){return '<article class="library-card"><div class="card-type">'+escapeHtml(item.type).toUpperCase()+'</div><h3>'+escapeHtml(item.title)+'</h3><p>'+escapeHtml(item.author)+'</p><p style="margin-top:10px;line-height:1.45">'+escapeHtml(item.description)+'</p><div class="card-footer"><div class="progress-line"><i style="width:'+item.progress+'%"></i></div><button class="card-open" data-start="'+item.id+'">打开内容 →</button></div></article>';}).join("")+"</div>" : '<div class="empty">没有找到匹配内容。试试导入一份 Markdown 或单词表。</div>');
+    (visible.length ? '<div class="library-grid">'+visible.map(function(item){return '<article class="library-card"><div class="card-type">'+escapeHtml(item.type).toUpperCase()+'</div><h3>'+escapeHtml(item.title)+'</h3><p>'+escapeHtml(item.author)+'</p><p style="margin-top:10px;line-height:1.45">'+escapeHtml(item.description)+'</p><div class="card-footer"><div class="progress-line"><i style="width:'+itemProgress(item)+'%"></i></div><div class="card-actions"><button class="card-open" data-start="'+item.id+'">打开内容 →</button><button class="card-icon" data-edit="'+item.id+'" title="编辑内容" aria-label="编辑内容">✎</button><button class="card-icon" data-reset="'+item.id+'" title="重置学习进度" aria-label="重置学习进度">↺</button><button class="card-icon card-icon-danger" data-delete="'+item.id+'" title="删除内容" aria-label="删除内容">×</button></div></div></article>';}).join("")+"</div>" : '<div class="empty">没有找到匹配内容。试试导入一份 Markdown 或单词表。</div>');
   bind();
   const search=document.getElementById("library-search");
   if (search) search.addEventListener("input",function(event){state.query=event.target.value;renderLibrary();});
   const importer=document.getElementById("open-import");
   if (importer) importer.addEventListener("click",openImport);
+}
+function serializeEditableUnit(unit) {
+  return [unit.prompt,unit.answer,unit.context,unit.note].map(function(value){return String(value || "").replace(/\r?\n/g," ").replace(/\|/g,"／");}).join(" | ");
+}
+function parseEditableUnits(raw, type) {
+  const parsed=[];
+  raw.replace(/\r/g,"").split("\n").map(function(line){return line.trim();}).filter(Boolean).forEach(function(line){
+    const pieces=line.split("|").map(function(piece){return piece.trim();});
+    const prompt=pieces.shift();
+    if (!prompt) return;
+    const answer=pieces.shift() || "待补充释义";
+    const context=pieces.shift() || "来自编辑内容："+prompt;
+    const note=pieces.join(" | ") || "编辑后可以在复习中继续补充自己的例句和理解。";
+    parsed.push({kind:type==="歌曲笔记"?"短语":type==="影视台词"?"句子":"词汇",prompt:prompt,answer:answer,context:context,note:note});
+  });
+  return parsed;
+}
+function openEdit(itemId) {
+  const item=state.items.find(function(entry){return entry.id===itemId;});
+  if (!item) return;
+  const types=["歌曲笔记","单词书","影视台词","文章"];
+  const options=types.map(function(type){return '<option '+(item.type===type?"selected":"")+'>'+type+"</option>";}).join("");
+  const unitText=item.units.map(serializeEditableUnit).join("\n");
+  document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>编辑学习内容</h2><button class="close-btn" id="close-modal">×</button></div><div class="form-grid"><label>标题<input id="edit-title" value="'+escapeHtml(item.title)+'"></label><label>内容类型<select id="edit-type">'+options+'</select></label><label>来源<input id="edit-author" value="'+escapeHtml(item.author)+'"></label><label>简介<textarea id="edit-description" class="compact-textarea">'+escapeHtml(item.description)+'</textarea></label><label>学习单元<textarea id="edit-units" placeholder="英文 | 中文释义 | 例句 | 笔记">'+escapeHtml(unitText)+'</textarea><span class="form-help">每行一个学习单元，使用竖线分隔英文、释义、例句和笔记。</span></label></div><div class="modal-actions"><button class="quiet-btn" id="cancel-edit">取消</button><button class="primary-btn" id="confirm-edit">保存修改</button></div></div></div>';
+  document.getElementById("close-modal").onclick=closeModal;
+  document.getElementById("cancel-edit").onclick=closeModal;
+  document.getElementById("confirm-edit").onclick=function(){saveEditedItem(itemId);};
+}
+function saveEditedItem(itemId) {
+  const item=state.items.find(function(entry){return entry.id===itemId;});
+  if (!item) return;
+  const title=document.getElementById("edit-title").value.trim();
+  const type=document.getElementById("edit-type").value;
+  const author=document.getElementById("edit-author").value.trim() || "本地内容";
+  const description=document.getElementById("edit-description").value.trim();
+  const parsed=parseEditableUnits(document.getElementById("edit-units").value,type);
+  if (!title || !parsed.length) { notify("标题和学习单元不能为空"); return; }
+  const prefix=item.id+"::";
+  const prompts=new Set(parsed.map(function(unit){return unit.prompt;}));
+  Object.keys(state.schedule).forEach(function(key){if (key.indexOf(prefix)===0 && !prompts.has(key.slice(prefix.length))) delete state.schedule[key];});
+  item.title=title;
+  item.type=type;
+  item.author=author;
+  item.description=description || "个人编辑的学习内容。";
+  item.units=parsed.slice(0,120);
+  item.progress=itemProgress(item);
+  if (state.session && state.session.itemId===itemId) state.session=null;
+  persist(); closeModal(); renderLibrary(); notify("学习内容已更新");
+}
+function itemSchedulePrefix(itemId) { return itemId+"::"; }
+function deleteItem(itemId) {
+  const item=state.items.find(function(entry){return entry.id===itemId;});
+  if (!item || !window.confirm("确定删除“"+item.title+"”？删除后学习记录也会移除。")) return;
+  const prefix=itemSchedulePrefix(itemId);
+  state.items=state.items.filter(function(entry){return entry.id!==itemId;});
+  state.logs=state.logs.filter(function(log){return log.itemId!==itemId;});
+  Object.keys(state.schedule).forEach(function(key){if (key.indexOf(prefix)===0) delete state.schedule[key];});
+  if (state.session && state.session.itemId===itemId) state.session=null;
+  persist(); render(); notify("学习内容已删除");
+}
+function resetItemProgress(itemId) {
+  const item=state.items.find(function(entry){return entry.id===itemId;});
+  if (!item || !window.confirm("确定重置“"+item.title+"”的学习进度？")) return;
+  const prefix=itemSchedulePrefix(itemId);
+  state.logs=state.logs.filter(function(log){return log.itemId!==itemId;});
+  Object.keys(state.schedule).forEach(function(key){if (key.indexOf(prefix)===0) delete state.schedule[key];});
+  item.progress=0;
+  if (state.session && state.session.itemId===itemId) state.session=null;
+  persist(); render(); notify("学习进度已重置");
 }
 function renderReview() {
   const list=units();
@@ -342,17 +486,23 @@ function renderReview() {
   document.querySelectorAll("[data-repeat]").forEach(function(button){button.addEventListener("click",repeatReview);});
 }
 function renderStats() {
-  const total=state.logs.length, known=state.logs.filter(function(log){return log.rating==="know";}).length;
+  const metrics=learningStats();
+  const days=recentDays();
+  const maxDaily=Math.max(1,...days.map(function(day){return day.count;}));
+  const bars=days.map(function(day){const height=day.count ? Math.max(12,Math.round(day.count/maxDaily*100)) : 4; return '<i style="height:'+height+'%" title="'+day.count+' 次复习"><span>'+day.label+'</span></i>';}).join("");
   document.getElementById("view-stats").innerHTML =
     head("LEARNING RECORD","慢慢积累，<em>看得见变化</em>。","这里不评判你，只记录你真正做过的练习，以及哪些内容值得再次出现.","")+
-    '<div class="stats-grid"><div class="stats-box"><h3>累计复习</h3><div class="big">'+(total+36)+'</div><div style="color:var(--muted);font-size:12px">张卡片</div></div><div class="stats-box"><h3>主动记住</h3><div class="big">'+(known+28)+'</div><div style="color:var(--muted);font-size:12px">次反馈为“记住了”</div></div><div class="stats-box"><h3>学习时间</h3><div class="big">'+(18+total)+'<small style="font:14px var(--sans)"> min</small></div><div style="color:var(--muted);font-size:12px">本周累计</div></div></div>'+
-    '<div class="section-row" style="margin-top:35px"><h2>最近 7 天</h2><span style="color:var(--muted);font-size:12px">保持自己的节奏</span></div><div class="stats-box"><div class="bar-chart"><i style="height:36%"><span>一</span></i><i style="height:57%"><span>二</span></i><i style="height:28%"><span>三</span></i><i style="height:76%"><span>四</span></i><i style="height:48%"><span>五</span></i><i style="height:88%"><span>六</span></i><i style="height:63%"><span>日</span></i></div></div>';
+    '<div class="stats-grid"><div class="stats-box"><h3>累计复习</h3><div class="big">'+metrics.totalReviews+'</div><div style="color:var(--muted);font-size:12px">次反馈</div></div><div class="stats-box"><h3>记得反馈</h3><div class="big">'+metrics.rememberedReviews+'</div><div style="color:var(--muted);font-size:12px">次选择“记得”</div></div><div class="stats-box"><h3>当前待复习</h3><div class="big">'+metrics.dueCards+'</div><div style="color:var(--muted);font-size:12px">张卡片到期</div></div></div>'+
+    '<div class="section-row" style="margin-top:35px"><h2>最近 7 天</h2><span style="color:var(--muted);font-size:12px">共 '+metrics.weekReviews+' 次复习 · 连续 '+metrics.streak+' 天</span></div><div class="stats-box"><div class="bar-chart">'+bars+'</div></div>';
   bind();
 }
 function bind() {
   document.querySelectorAll("[data-view-link]").forEach(function(element){element.addEventListener("click",function(){setView(element.dataset.viewLink);});});
   document.querySelectorAll("[data-view]").forEach(function(element){element.addEventListener("click",function(){setView(element.dataset.view);});});
   document.querySelectorAll("[data-start]").forEach(function(element){element.addEventListener("click",function(){startSession(element.dataset.start);});});
+  document.querySelectorAll("[data-edit]").forEach(function(element){element.addEventListener("click",function(){openEdit(element.dataset.edit);});});
+  document.querySelectorAll("[data-reset]").forEach(function(element){element.addEventListener("click",function(){resetItemProgress(element.dataset.reset);});});
+  document.querySelectorAll("[data-delete]").forEach(function(element){element.addEventListener("click",function(){deleteItem(element.dataset.delete);});});
   document.querySelectorAll("[data-speak]").forEach(function(element){element.addEventListener("click",function(){speak(element.dataset.speak);});});
   document.querySelectorAll("[data-word-sound]").forEach(function(element){element.addEventListener("click",function(){playWord(element.dataset.wordSound);});});
   document.querySelectorAll("[data-filter]").forEach(function(element){element.addEventListener("click",function(){state.filter=element.dataset.filter;renderLibrary();});});
