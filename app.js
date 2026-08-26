@@ -321,16 +321,25 @@ function renderLibrary() {
 }
 function renderReview() {
   const list=units();
-  const queue = dueUnits().length ? dueUnits() : list;
-  const current=state.session && state.session.unit ? state.session.unit : list[0];
-  const answerVisible = Boolean(state.session && state.session.revealed);
+  const fallbackQueue = dueUnits().length ? dueUnits() : list;
+  const session = state.session && state.session.unit ? state.session : null;
+  const current=session ? session.unit : fallbackQueue[0];
+  const answerVisible = Boolean(session && session.phase === "answer");
+  const feedback = session && session.feedback;
+  const queue = session && Array.isArray(session.queue) ? session.queue.slice(session.index + 1).concat(session.repeats || []) : fallbackQueue;
+  let reviewActions;
+  if (!answerVisible) reviewActions='<div class="review-buttons"><button data-feedback="forgot">不记得</button><button data-feedback="remembered">记得</button></div>';
+  else if (feedback === "forgot") reviewActions='<div class="review-buttons"><button data-next>下一个</button></div>';
+  else reviewActions='<div class="review-buttons"><button data-next>下一个</button><button data-repeat>再来一次</button></div>';
   document.getElementById("view-review").innerHTML =
-    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回想，再根据自己的状态选择反馈；模糊的内容会先显示答案，然后自动再来一次。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
+    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回想，再选择“不记得”或“记得”；答案会持续显示，不记得的内容会在本轮稍后再次出现。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
     '<div class="review-layout"><section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+' <span class="review-due">'+escapeHtml(formatDue(current))+'</span></div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
     (answerVisible ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
-    '<div class="review-buttons"><button class="sound-btn" data-word-sound="'+escapeHtml(current.prompt)+'">听发音</button><button data-rate="again">再来一次</button><button data-rate="hard">有点模糊</button><button data-rate="know">记住了</button></div></section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+queue.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+" · "+escapeHtml(formatDue(unit))+"</span></div></div>";}).join("")+"</aside></div>";
+    reviewActions+'</section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+queue.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+" · "+escapeHtml(formatDue(unit))+"</span></div></div>";}).join("")+"</aside></div>";
   bind();
-  document.querySelectorAll("[data-rate]").forEach(function(button){button.addEventListener("click",function(){rateCard(button.dataset.rate,current);});});
+  document.querySelectorAll("[data-feedback]").forEach(function(button){button.addEventListener("click",function(){recordFeedback(button.dataset.feedback,current);});});
+  document.querySelectorAll("[data-next]").forEach(function(button){button.addEventListener("click",advanceReview);});
+  document.querySelectorAll("[data-repeat]").forEach(function(button){button.addEventListener("click",repeatReview);});
 }
 function renderStats() {
   const total=state.logs.length, known=state.logs.filter(function(log){return log.rating==="know";}).length;
@@ -351,36 +360,66 @@ function bind() {
 function startSession(itemId) {
   const item=state.items.find(function(entry){return entry.id===itemId;}) || state.items[0];
   const itemUnits=item.units.map(function(unit,index){return Object.assign({},unit,{itemId:item.id,itemTitle:item.title,unitIndex:index});});
-  const first=itemUnits.find(function(unit){return cardSchedule(unit).dueAt<=Date.now();}) || itemUnits[0];
-  state.session={itemId:item.id,index:first.unitIndex,unit:first,revealed:false};
+  const firstIndex=itemUnits.findIndex(function(unit){return cardSchedule(unit).dueAt<=Date.now();});
+  const index=firstIndex < 0 ? 0 : firstIndex;
+  state.session={itemId:item.id,baseQueue:itemUnits.slice(),queue:itemUnits,index:index,unit:itemUnits[index],phase:"prompt",feedback:null,repeats:[],repeatPass:false};
   setView("review");
   notify("已进入 "+item.title+" 的学习队列");
 }
-function rateCard(rating, current) {
-  state.logs.push({itemId:state.session ? state.session.itemId : current.itemId,prompt:current.prompt,rating:rating,at:new Date().toISOString()});
-  const item=state.items.find(function(entry){return entry.id===(state.session ? state.session.itemId : current.itemId);});
-  if (item) item.progress=Math.min(100,item.progress+(rating==="know"?4:rating==="hard"?2:1));
-  const list=units();
-  const index=list.findIndex(function(unit){return unit.prompt===current.prompt && unit.itemId===current.itemId;});
+function sameCard(first, second) {
+  return Boolean(first && second && first.itemId===second.itemId && first.prompt===second.prompt);
+}
+function ensureReviewSession(current) {
+  if (state.session && state.session.unit) return state.session;
+  const queue=dueUnits().length ? dueUnits() : units();
+  const index=Math.max(0,queue.findIndex(function(unit){return sameCard(unit,current);}));
+  state.session={itemId:current.itemId,baseQueue:queue.slice(),queue:queue,index:index,unit:queue[index] || current,phase:"prompt",feedback:null,repeats:[],repeatPass:false};
+  return state.session;
+}
+function recordFeedback(feedback, current) {
+  const session=ensureReviewSession(current);
+  const rating=feedback==="forgot" ? "again" : "know";
+  state.logs.push({itemId:current.itemId,prompt:current.prompt,rating:rating,at:new Date().toISOString()});
+  const item=state.items.find(function(entry){return entry.id===current.itemId;});
+  if (item) item.progress=Math.min(100,item.progress+(rating==="know"?4:1));
   scheduleCard(current, rating);
-  if (rating === "know") {
-    const next=list[(Math.max(0,index)+1)%list.length];
-    state.session={itemId:next.itemId,unit:next,revealed:false};
-    persist(); renderReview(); notify("已加入更远的复习间隔");
-    return;
+  session.unit=current;
+  session.phase="answer";
+  session.feedback=feedback;
+  if (feedback==="forgot" && !session.repeatPass && !session.repeats.some(function(unit){return sameCard(unit,current);})) session.repeats.push(current);
+  persist(); renderReview();
+  notify(feedback==="forgot" ? "答案会一直显示，并在本轮稍后再次出现" : "答案已显示，可以继续下一张");
+}
+function advanceReview() {
+  const session=state.session;
+  if (!session || !session.unit) return;
+  let queue=session.queue, index=session.index+1, repeatPass=session.repeatPass;
+  if (index >= queue.length) {
+    if (session.repeats && session.repeats.length) {
+      queue=session.repeats.slice();
+      session.repeats=[];
+      index=0;
+      repeatPass=true;
+    } else {
+      queue=session.baseQueue && session.baseQueue.length ? session.baseQueue.slice() : (dueUnits().length ? dueUnits() : units());
+      index=0;
+      repeatPass=false;
+    }
   }
-  if (rating === "hard") {
-    state.session={itemId:current.itemId,unit:current,revealed:true};
-    persist(); renderReview(); notify("答案已显示，马上再来一次");
-    window.setTimeout(function(){
-      if (!state.session || state.session.unit.prompt !== current.prompt || !state.session.revealed) return;
-      state.session={itemId:current.itemId,unit:current,revealed:false};
-      renderReview();
-    }, 1200);
-    return;
-  }
-  state.session={itemId:current.itemId,unit:current,revealed:false};
-  persist(); renderReview(); notify("这张卡片会马上再出现");
+  session.queue=queue;
+  session.index=index;
+  session.unit=queue[index];
+  session.phase="prompt";
+  session.feedback=null;
+  session.repeatPass=repeatPass;
+  renderReview();
+}
+function repeatReview() {
+  if (!state.session || !state.session.unit) return;
+  state.session.phase="prompt";
+  state.session.feedback=null;
+  renderReview();
+  notify("再来一次");
 }
 function parseSubtitleUnits(raw) {
   const parsed=[];
