@@ -1,5 +1,6 @@
 const LIB_KEY = "english-study-library-v1";
 const LOG_KEY = "english-study-logs-v1";
+const SCHEDULE_KEY = "english-study-schedule-v1";
 
 const seed = [
   {
@@ -155,6 +156,7 @@ const seed = [
 const state = {
   items: load("library", seed),
   logs: load("logs", []),
+  schedule: loadObject(SCHEDULE_KEY, {}),
   view:"home",
   filter:"全部",
   query:"",
@@ -170,9 +172,16 @@ function load(kind, fallback) {
     return Array.isArray(value) && value.length ? value : fallback;
   } catch (error) { return fallback; }
 }
+function loadObject(key, fallback) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key));
+    return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
+  } catch (error) { return fallback; }
+}
 function persist() {
   localStorage.setItem(LIB_KEY, JSON.stringify(state.items));
   localStorage.setItem(LOG_KEY, JSON.stringify(state.logs));
+  localStorage.setItem(SCHEDULE_KEY, JSON.stringify(state.schedule));
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[&<>"']/g, function(char) {
@@ -186,7 +195,45 @@ function units() {
     }));
   }, []);
 }
-function dueCount() { return Math.max(3, 8 - Math.min(5, Math.floor(state.logs.length / 4))); }
+function cardKey(unit) { return unit.itemId + "::" + unit.prompt; }
+function cardSchedule(unit) {
+  return state.schedule[cardKey(unit)] || {dueAt:0,interval:0,ease:2.5,reviews:0,lapses:0};
+}
+function dueUnits() {
+  const now = Date.now();
+  return units().filter(function(unit){ return cardSchedule(unit).dueAt <= now; });
+}
+function dueCount() { return dueUnits().length; }
+function formatInterval(minutes) {
+  if (minutes < 60) return Math.max(1, Math.round(minutes)) + " 分钟";
+  if (minutes < 1440) return Math.round(minutes / 60) + " 小时";
+  return Math.round(minutes / 1440) + " 天";
+}
+function formatDue(unit) {
+  const dueAt = cardSchedule(unit).dueAt;
+  if (!dueAt || dueAt <= Date.now()) return "现在复习";
+  const minutes = Math.ceil((dueAt - Date.now()) / 60000);
+  return "下次复习 · " + formatInterval(minutes);
+}
+function scheduleCard(unit, rating) {
+  const key = cardKey(unit);
+  const current = cardSchedule(unit);
+  let interval;
+  if (rating === "again") interval = 10;
+  else if (rating === "hard") interval = current.interval ? Math.max(60, Math.round(current.interval * 1.4)) : 720;
+  else interval = current.interval ? Math.max(1440, Math.round(current.interval * current.ease)) : 1440;
+  const next = {
+    dueAt: Date.now() + interval * 60000,
+    interval: interval,
+    ease: rating === "hard" ? Math.max(1.8, current.ease - .15) : rating === "know" ? Math.min(3.2, current.ease + .05) : current.ease,
+    reviews: current.reviews + 1,
+    lapses: current.lapses + (rating === "again" ? 1 : 0),
+    lastRating: rating,
+    lastReviewedAt: Date.now()
+  };
+  state.schedule[key] = next;
+  return next;
+}
 function notify(message) {
   const root = document.getElementById("toast-root");
   root.innerHTML = '<div class="toast">'+escapeHtml(message)+"</div>";
@@ -274,13 +321,14 @@ function renderLibrary() {
 }
 function renderReview() {
   const list=units();
+  const queue = dueUnits().length ? dueUnits() : list;
   const current=state.session && state.session.unit ? state.session.unit : list[0];
   const answerVisible = Boolean(state.session && state.session.revealed);
   document.getElementById("view-review").innerHTML =
-    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回答，再查看释义。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
-    '<div class="review-layout"><section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+'</div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
+    head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回想，再根据自己的状态选择反馈；模糊的内容会先显示答案，然后自动再来一次。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
+    '<div class="review-layout"><section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+' <span class="review-due">'+escapeHtml(formatDue(current))+'</span></div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
     (answerVisible ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
-    '<div class="review-buttons"><button class="sound-btn" data-word-sound="'+escapeHtml(current.prompt)+'">听发音</button><button data-rate="again">再来一次</button><button data-rate="hard">有点模糊</button><button data-rate="know">记住了</button></div></section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+list.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+"</span></div></div>";}).join("")+"</aside></div>";
+    '<div class="review-buttons"><button class="sound-btn" data-word-sound="'+escapeHtml(current.prompt)+'">听发音</button><button data-rate="again">再来一次</button><button data-rate="hard">有点模糊</button><button data-rate="know">记住了</button></div></section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+queue.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+" · "+escapeHtml(formatDue(unit))+"</span></div></div>";}).join("")+"</aside></div>";
   bind();
   document.querySelectorAll("[data-rate]").forEach(function(button){button.addEventListener("click",function(){rateCard(button.dataset.rate,current);});});
 }
@@ -302,7 +350,9 @@ function bind() {
 }
 function startSession(itemId) {
   const item=state.items.find(function(entry){return entry.id===itemId;}) || state.items[0];
-  state.session={itemId:item.id,index:0,unit:Object.assign({},item.units[0],{itemId:item.id,itemTitle:item.title}),revealed:false};
+  const itemUnits=item.units.map(function(unit,index){return Object.assign({},unit,{itemId:item.id,itemTitle:item.title,unitIndex:index});});
+  const first=itemUnits.find(function(unit){return cardSchedule(unit).dueAt<=Date.now();}) || itemUnits[0];
+  state.session={itemId:item.id,index:first.unitIndex,unit:first,revealed:false};
   setView("review");
   notify("已进入 "+item.title+" 的学习队列");
 }
@@ -312,6 +362,7 @@ function rateCard(rating, current) {
   if (item) item.progress=Math.min(100,item.progress+(rating==="know"?4:rating==="hard"?2:1));
   const list=units();
   const index=list.findIndex(function(unit){return unit.prompt===current.prompt && unit.itemId===current.itemId;});
+  scheduleCard(current, rating);
   if (rating === "know") {
     const next=list[(Math.max(0,index)+1)%list.length];
     state.session={itemId:next.itemId,unit:next,revealed:false};
@@ -331,8 +382,33 @@ function rateCard(rating, current) {
   state.session={itemId:current.itemId,unit:current,revealed:false};
   persist(); renderReview(); notify("这张卡片会马上再出现");
 }
+function parseSubtitleUnits(raw) {
+  const parsed=[];
+  raw.replace(/\r/g, "").split("\n").forEach(function(line){
+    let text=line.trim();
+    if (!text || /^\d+$/.test(text) || /^WEBVTT/i.test(text) || /^NOTE\b/i.test(text) || /^STYLE\b/i.test(text)) return;
+    if (/^Dialogue:/i.test(text)) text=text.split(",").slice(9).join(",").trim();
+    if (/-->/.test(text) || /^\d{1,2}:\d{2}(?::\d{2})?[,.]\d{3}/.test(text)) return;
+    text=text.replace(/<[^>]+>/g, "").replace(/\{[^}]+\}/g, "").trim();
+    if (text && text.length>1 && text.length<=180) parsed.push({kind:"句子",prompt:text,answer:"先回忆这句台词的中文含义",context:text,note:"字幕导入内容；可以在复习中补充译文、语气和场景说明。"});
+  });
+  return parsed;
+}
+function parseLearningUnits(raw, type) {
+  if (type === "影视台词" && /-->|^Dialogue:/im.test(raw)) return parseSubtitleUnits(raw);
+  const parsed=[];
+  raw.replace(/\r/g, "").split("\n").map(function(line){return line.trim();}).filter(Boolean).forEach(function(line){
+    const clean=line.replace(/^[-*]\s*/, "").replace(/^\d+[.)]\s*/, "");
+    if (!clean || clean[0]==="#" || clean[0]===">" || clean[0]==="|" || /^---+$/.test(clean) || /^(word|term|english)\s*,/i.test(clean)) return;
+    const separator=clean.indexOf("：")>=0 ? "：" : clean.indexOf(",")>=0 ? "," : clean.indexOf(":")>=0 ? ":" : null;
+    if (!separator && type!=="单词书" && clean.includes(" ") && clean.split(/\s+/).length>5) return;
+    const pieces=separator ? clean.split(separator) : [clean], prompt=pieces.shift().trim(), answer=pieces.join("，").trim() || "待补充释义";
+    if (prompt && prompt.length>1 && prompt.length<=80) parsed.push({kind:type==="歌曲笔记"?"短语":type==="影视台词"?"句子":"词汇",prompt:prompt,answer:answer,context:"来自导入内容："+prompt,note:"导入后可以在复习中继续补充自己的例句和理解。"});
+  });
+  return parsed;
+}
 function openImport() {
-  document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>导入学习内容</h2><button class="close-btn" id="close-modal">×</button></div><div class="form-grid"><label>标题<input id="import-title" placeholder="例如：Friends · Season 01"></label><label>内容类型<select id="import-type"><option>单词书</option><option>歌曲笔记</option><option>影视台词</option><option>文章</option></select></label><label>粘贴 Markdown、CSV 或 TXT<textarea id="import-text" placeholder="# Vocabulary\n\n- retain：保留；记住\n- context：语境\n\n## Phrases\n- in context：在语境中"></textarea></label><label>或选择文件<input id="import-file" type="file" accept=".md,.txt,.csv"></label></div><div class="modal-actions"><button class="quiet-btn" id="cancel-import">取消</button><button class="primary-btn" id="confirm-import">导入并建立学习卡片</button></div></div></div>';
+  document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>导入学习内容</h2><button class="close-btn" id="close-modal">×</button></div><div class="form-grid"><label>标题<input id="import-title" placeholder="例如：Friends · Season 01"></label><label>内容类型<select id="import-type"><option>单词书</option><option>歌曲笔记</option><option>影视台词</option><option>文章</option></select></label><label>粘贴 Markdown、CSV、TXT 或字幕<textarea id="import-text" placeholder="# Vocabulary\n\n- retain：保留；记住\n- context：语境\n\n## Phrases\n- in context：在语境中"></textarea></label><label>或选择文件<input id="import-file" type="file" accept=".md,.txt,.csv,.srt,.vtt,.ass"></label></div><div class="modal-actions"><button class="quiet-btn" id="cancel-import">取消</button><button class="primary-btn" id="confirm-import">导入并建立学习卡片</button></div></div></div>';
   document.getElementById("close-modal").onclick=closeModal;
   document.getElementById("cancel-import").onclick=closeModal;
   document.getElementById("confirm-import").onclick=importContent;
@@ -345,13 +421,7 @@ function importContent() {
   const type=document.getElementById("import-type").value;
   const raw=document.getElementById("import-text").value.trim();
   if (!raw) { notify("请先粘贴内容"); return; }
-  const parsed=[];
-  raw.split(/\r?\n/).map(function(line){return line.trim();}).filter(Boolean).forEach(function(line){
-    const clean=line.replace(/^[-*]\s*/,"").replace(/^\d+[.)]\s*/,"");
-    if (clean[0]==="#" || clean[0]==">" || clean[0]==="|") return;
-    const pieces=clean.split(/[：:,]/), prompt=pieces.shift().trim(), answer=pieces.join("，").trim() || "待补充释义";
-    if (prompt && prompt.length<=80 && prompt.length>1) parsed.push({kind:type==="影视台词"?"句子":type==="歌曲笔记"?"短语":"词汇",prompt:prompt,answer:answer,context:"来自导入内容："+prompt,note:"导入后可以在复习中继续补充自己的例句和理解。"});
-  });
+  const parsed=parseLearningUnits(raw,type);
   if (!parsed.length) { notify("没有识别出可学习的条目"); return; }
   state.items.unshift({id:"import-"+Date.now(),type:type,title:title,author:"本地导入",level:"自定义",progress:0,description:"从本地文本导入的个人学习内容。",units:parsed.slice(0,60)});
   persist(); closeModal(); state.filter="全部"; state.query=""; setView("library"); notify("已导入 "+parsed.length+" 个学习单元");
