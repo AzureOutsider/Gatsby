@@ -2,6 +2,9 @@ const LIB_KEY = "english-study-library-v1";
 const LOG_KEY = "english-study-logs-v1";
 const SCHEDULE_KEY = "english-study-schedule-v1";
 const MODE_KEY = "english-study-practice-mode-v1";
+const ROUND_KEY = "english-study-round-v1";
+const ROUNDS_KEY = "english-study-rounds-v1";
+const ROUND_SIZE_KEY = "english-study-round-size-v1";
 
 const seed = [
   {
@@ -162,11 +165,20 @@ const state = {
   filter:"全部",
   query:"",
   practiceMode:["spelling","cloze"].indexOf(localStorage.getItem(MODE_KEY))>=0 ? localStorage.getItem(MODE_KEY) : "cards",
-  session:null
+  session:null,
+  round:loadObject(ROUND_KEY, null),
+  rounds:loadArray(ROUNDS_KEY, []),
+  roundSize:loadRoundSize(),
+  roundStartItemId:null
 };
 
 const pronunciationCache = new Map();
 const pronunciationFetches = new Map();
+
+function validRound(round) {
+  return Boolean(round && Array.isArray(round.cards) && round.cards.length && Array.isArray(round.cardQueue) && round.cardQueue.length && ["cards","gate","spelling","complete"].indexOf(round.stage)>=0);
+}
+if (!validRound(state.round)) state.round=null;
 
 function load(kind, fallback) {
   try {
@@ -180,11 +192,24 @@ function loadObject(key, fallback) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
   } catch (error) { return fallback; }
 }
+function loadArray(key, fallback) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(value) ? value : fallback;
+  } catch (error) { return fallback; }
+}
+function loadRoundSize() {
+  const value=Number.parseInt(localStorage.getItem(ROUND_SIZE_KEY),10);
+  return [5,10,15,20].indexOf(value)>=0 ? value : 10;
+}
 function persist() {
   localStorage.setItem(LIB_KEY, JSON.stringify(state.items));
   localStorage.setItem(LOG_KEY, JSON.stringify(state.logs));
   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(state.schedule));
   localStorage.setItem(MODE_KEY, state.practiceMode);
+  localStorage.setItem(ROUND_KEY, state.round ? JSON.stringify(state.round) : "null");
+  localStorage.setItem(ROUNDS_KEY, JSON.stringify(state.rounds));
+  localStorage.setItem(ROUND_SIZE_KEY, String(state.roundSize));
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[&<>"']/g, function(char) {
@@ -302,7 +327,8 @@ function learningStats() {
     dueCards:dueCount(),
     weekReviews:weekReviews,
     streak:currentStreak(),
-    sourceCount:new Set(state.items.map(function(item){return item.type;})).size
+    sourceCount:new Set(state.items.map(function(item){return item.type;})).size,
+    completedRounds:state.rounds.length
   };
 }
 function notify(message) {
@@ -443,9 +469,15 @@ function saveEditedItem(itemId) {
   item.units=parsed.slice(0,120);
   item.progress=itemProgress(item);
   if (state.session && state.session.itemId===itemId) state.session=null;
+  clearRoundIfUsesItem(itemId);
   persist(); closeModal(); renderLibrary(); notify("学习内容已更新");
 }
 function itemSchedulePrefix(itemId) { return itemId+"::"; }
+function clearRoundIfUsesItem(itemId) {
+  if (!state.round) return;
+  const matches=state.round.itemId===itemId || (state.round.cards || []).some(function(unit){return unit.itemId===itemId;});
+  if (matches) state.round=null;
+}
 function deleteItem(itemId) {
   const item=state.items.find(function(entry){return entry.id===itemId;});
   if (!item || !window.confirm("确定删除“"+item.title+"”？删除后学习记录也会移除。")) return;
@@ -454,6 +486,7 @@ function deleteItem(itemId) {
   state.logs=state.logs.filter(function(log){return log.itemId!==itemId;});
   Object.keys(state.schedule).forEach(function(key){if (key.indexOf(prefix)===0) delete state.schedule[key];});
   if (state.session && state.session.itemId===itemId) state.session=null;
+  clearRoundIfUsesItem(itemId);
   persist(); render(); notify("学习内容已删除");
 }
 function resetItemProgress(itemId) {
@@ -464,6 +497,7 @@ function resetItemProgress(itemId) {
   Object.keys(state.schedule).forEach(function(key){if (key.indexOf(prefix)===0) delete state.schedule[key];});
   item.progress=0;
   if (state.session && state.session.itemId===itemId) state.session=null;
+  clearRoundIfUsesItem(itemId);
   persist(); render(); notify("学习进度已重置");
 }
 function reviewActionMarkup(session) {
@@ -480,6 +514,131 @@ function maskPrompt(context, prompt) {
 }
 function normalizeAnswer(value) {
   return String(value || "").toLowerCase().replace(/[’‘']/g,"").replace(/[-–—]/g," ").replace(/[.!?,;:]+$/g,"").replace(/\s+/g," ").trim();
+}
+function roundSourceUnits(sourceId) {
+  if (sourceId && sourceId!=="all") {
+    const item=state.items.find(function(entry){return entry.id===sourceId;});
+    if (item) return item.units.map(function(unit,index){return Object.assign({},unit,{itemId:item.id,itemTitle:item.title,unitIndex:index});});
+  }
+  return units();
+}
+function selectRoundCards(sourceId, size) {
+  const source=roundSourceUnits(sourceId).slice();
+  const now=Date.now();
+  const due=source.filter(function(unit){return cardSchedule(unit).dueAt<=now;});
+  const later=source.filter(function(unit){return cardSchedule(unit).dueAt>now;}).sort(function(a,b){return cardSchedule(a).dueAt-cardSchedule(b).dueAt;});
+  return due.concat(later).slice(0,Math.max(1,size));
+}
+function roundCardKey(unit) { return cardKey(unit); }
+function roundCurrentCard(round) { return round && round.cardQueue ? round.cardQueue[round.cardIndex] : null; }
+function roundLabel(round) {
+  if (!round) return "";
+  if (round.stage==="cards") return "翻卡 " + Math.min(round.cardIndex+1,round.cardQueue.length) + " / " + round.cardQueue.length;
+  if (round.stage==="gate") return "翻卡已完成";
+  if (round.stage==="spelling") return "拼写 " + Math.min(round.spellingIndex+1,round.cards.length) + " / " + round.cards.length;
+  return "本轮已完成";
+}
+function roundQueueMarkup(round) {
+  let queue=[];
+  if (round.stage==="cards") queue=round.cardQueue.slice(round.cardIndex+1);
+  if (round.stage==="spelling") queue=round.cards.slice(round.spellingIndex+1);
+  return queue.slice(0,5).map(function(unit,index){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+(index===0 ? " · 下一张" : "")+'</span></div></div>';}).join("");
+}
+function roundProgressMarkup(round) {
+  const total=round.stage==="cards" ? round.cardQueue.length : round.cards.length;
+  const done=round.stage==="spelling" ? round.spellingIndex : round.stage==="gate" || round.stage==="complete" ? total : Math.min(round.cardIndex,total);
+  return '<div class="round-progress"><div class="round-progress-top"><span>第 '+escapeHtml(round.id.replace(/^round-/,""))+' 轮</span><strong>'+escapeHtml(roundLabel(round))+'</strong></div><div class="round-progress-track"><i style="width:'+Math.round(done/total*100)+'%"></i></div></div>';
+}
+function createRound(sourceId, size) {
+  const cards=selectRoundCards(sourceId,size);
+  if (!cards.length) { notify("当前没有可学习的内容"); return false; }
+  const sourceTitle=sourceId && sourceId!=="all" ? ((state.items.find(function(item){return item.id===sourceId;}) || {}).title || "指定内容") : "全部内容";
+  state.round={
+    id:"round-"+Date.now(), itemId:sourceId && sourceId!=="all" ? sourceId : null, sourceTitle:sourceTitle,
+    requestedSize:Number(size), cards:cards, cardQueue:cards.slice(), cardIndex:0, cardPhase:"prompt", cardFeedback:null,
+    cardRepeats:{}, stage:"cards", spellingIndex:0, spellingPhase:"prompt", typedAnswer:"", typingCorrect:null,
+    spellingAttempts:{}, spellingWrong:0, startedAt:new Date().toISOString(), completedAt:null
+  };
+  state.session=null;
+  state.roundStartItemId=null;
+  persist();
+  return true;
+}
+function startRound(sourceId, size) {
+  if (validRound(state.round)) { setView("review"); notify("当前已有进行中的学习轮次"); return; }
+  const selectedSize=[5,10,15,20].indexOf(Number(size))>=0 ? Number(size) : state.roundSize;
+  state.roundSize=selectedSize;
+  if (!createRound(sourceId || "all", selectedSize)) return;
+  setView("review");
+  notify("已开始本轮学习");
+}
+function completeRound(reason) {
+  const round=state.round;
+  if (!round || round.completedAt) return;
+  round.stage="complete";
+  round.completedAt=new Date().toISOString();
+  state.rounds.unshift({id:round.id,sourceTitle:round.sourceTitle,requestedSize:round.requestedSize,cardCount:round.cards.length,spellingCompleted:reason!=="skip",spellingWrong:round.spellingWrong || 0,startedAt:round.startedAt,completedAt:round.completedAt});
+  state.rounds=state.rounds.slice(0,100);
+  state.round=null;
+  persist();
+  renderReview();
+  notify(reason==="skip" ? "本轮已结束，记录已保存" : "本轮学习完成，记录已保存");
+}
+function renderRoundStart() {
+  const selected=state.roundStartItemId && state.items.some(function(item){return item.id===state.roundStartItemId;}) ? state.roundStartItemId : "all";
+  const options='<option value="all" '+(selected==="all"?"selected":"")+'>全部内容（按到期优先）</option>'+state.items.map(function(item){return '<option value="'+escapeHtml(item.id)+'" '+(selected===item.id?"selected":"")+'>'+escapeHtml(item.title)+' · '+item.units.length+' 个单元</option>';}).join("");
+  const sizes=[5,10,15,20].map(function(size){return '<option value="'+size+'" '+(state.roundSize===size?"selected":"")+'>'+size+' 个</option>';}).join("");
+  document.getElementById("view-review").innerHTML=head("LEARNING ROUND","开始一轮，<em>专注一小组</em>。","每轮先翻卡复习固定数量的单词、词组或句子，再决定是否进行拼写巩固。关闭窗口后，当前轮次会从原位置继续。","")+ '<section class="round-start-panel"><div class="round-start-copy"><div class="kicker">ONE ROUND · ONE FOCUS</div><h2>把今天的内容分成一小步</h2><p>到期卡片会优先进入本轮，不足数量时再补充其他内容。</p></div><div class="round-start-form"><label>学习来源<select id="round-source">'+options+'</select></label><label>本轮数量<select id="round-size">'+sizes+'</select></label><button class="primary-btn" data-start-round>开始这一轮</button><button class="quiet-btn" data-free-start>进入自由练习</button></div></section>'+
+    (state.rounds.length ? '<section class="round-history-preview"><div class="section-row"><h2>最近完成的轮次</h2><span>'+state.rounds.length+' 轮已记录</span></div>'+state.rounds.slice(0,3).map(function(round){return '<div class="round-history-row"><strong>'+escapeHtml(round.sourceTitle)+'</strong><span>'+round.cardCount+' 个单元 · '+(round.spellingCompleted?"完成拼写":"跳过拼写")+' · '+new Date(round.completedAt).toLocaleDateString()+'</span></div>';}).join("")+'</section>' : '');
+  bind();
+  const source=document.getElementById("round-source");
+  const size=document.getElementById("round-size");
+  if (source) source.addEventListener("change",function(){state.roundStartItemId=source.value==="all"?null:source.value;});
+  if (size) size.addEventListener("change",function(){state.roundSize=Number(size.value);persist();});
+  document.querySelectorAll("[data-start-round]").forEach(function(button){button.addEventListener("click",function(){startRound(source ? source.value : "all",size ? Number(size.value) : state.roundSize);});});
+  document.querySelectorAll("[data-free-start]").forEach(function(button){button.addEventListener("click",function(){startFreeSession(source && source.value!=="all" ? source.value : null);});});
+}
+function renderRoundCard(round) {
+  const current=roundCurrentCard(round);
+  if (!current) return "";
+  const answerVisible=round.cardPhase==="answer";
+  const actions=answerVisible ? (round.cardFeedback==="forgot" ? '<div class="review-buttons"><button data-round-next>下一个</button></div>' : '<div class="review-buttons"><button data-round-next>下一个</button><button data-round-repeat>再来一次</button></div>') : '<div class="review-buttons"><button data-round-feedback="forgot">不记得</button><button data-round-feedback="remembered">记得</button></div>';
+  return '<section class="review-card"><div class="review-kind">翻卡复习 · '+escapeHtml(current.kind)+' · '+escapeHtml(current.itemTitle)+'</div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+'</div>'+(answerVisible?'<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+'</div>':"")+actions+'</section>';
+}
+function renderRoundGate(round) {
+  return '<section class="round-gate"><div class="kicker">FLASHCARDS COMPLETE</div><h2>翻卡复习完成</h2><p>这一轮的 '+round.cards.length+' 个学习单元已经看过。现在可以把刚才的内容再写一遍，巩固拼写和回忆。</p><div class="round-gate-stats"><span><strong>'+round.cards.length+'</strong> 个单元</span><span><strong>'+Object.keys(round.cardRepeats || {}).length+'</strong> 个稍后重现</span></div><div class="review-buttons"><button class="primary-btn" data-enter-spelling>进入拼写练习</button><button class="quiet-btn" data-finish-round>结束本轮</button></div></section>';
+}
+function renderRoundSpelling(round) {
+  const current=round.cards[round.spellingIndex];
+  if (!current) return "";
+  const answerVisible=round.spellingPhase==="answer";
+  const header='<div class="review-kind">本轮拼写 · '+escapeHtml(current.kind)+' · '+escapeHtml(current.itemTitle)+'</div>';
+  if (!answerVisible) return '<section class="review-card spelling-card">'+header+'<div class="spelling-instruction">根据中文释义写出刚才复习过的英文</div><div class="spelling-hint-row"><div class="spelling-hint">'+escapeHtml(current.answer)+'</div><button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放参考发音">♪</button></div><div class="review-context spelling-context">'+escapeHtml(maskPrompt(current.context,current.prompt))+'</div><div class="spelling-entry"><input id="round-practice-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="输入英文答案"><button class="primary-btn" data-round-check>检查答案</button></div></section>';
+  const correct=round.typingCorrect===true;
+  return '<section class="review-card spelling-card">'+header+'<div class="spelling-result '+(correct?"typing-correct":"typing-incorrect")+'">'+(correct?"拼写正确":"还不正确，再写一次")+'</div><div class="typed-answer">你的答案：'+escapeHtml(round.typedAnswer || "未填写")+'</div><div class="answer">答案：'+escapeHtml(current.prompt)+' <button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+'</div><div class="review-buttons">'+(correct?'<button data-round-spelling-next>下一个</button>':'<button data-round-spelling-retry>再来一次</button>')+'</div></section>';
+}
+function renderActiveRound() {
+  const round=state.round;
+  if (!validRound(round)) { state.round=null; persist(); renderRoundStart(); return; }
+  let body="";
+  if (round.stage==="cards") body=renderRoundCard(round);
+  if (round.stage==="gate") body=renderRoundGate(round);
+  if (round.stage==="spelling") body=renderRoundSpelling(round);
+  const queue=round.stage==="gate" ? [] : roundQueueMarkup(round);
+  document.getElementById("view-review").innerHTML=head("LEARNING ROUND",escapeHtml(round.sourceTitle)+' · <em>'+escapeHtml(roundLabel(round))+'</em>',"本轮进度会自动保存。你可以随时关闭程序，之后从这里继续。",roundProgressMarkup(round))+'<div class="review-layout">'+body+'<aside class="queue"><div class="kicker">ROUND QUEUE</div><h3>本轮接下来</h3>'+(queue || '<div class="empty">这一阶段没有待处理内容。</div>')+'</aside></div>';
+  bind();
+  document.querySelectorAll("[data-round-feedback]").forEach(function(button){button.addEventListener("click",function(){recordRoundFeedback(button.dataset.roundFeedback);});});
+  document.querySelectorAll("[data-round-next]").forEach(function(button){button.addEventListener("click",advanceRoundCard);});
+  document.querySelectorAll("[data-round-repeat]").forEach(function(button){button.addEventListener("click",repeatRoundCard);});
+  document.querySelectorAll("[data-enter-spelling]").forEach(function(button){button.addEventListener("click",enterRoundSpelling);});
+  document.querySelectorAll("[data-finish-round]").forEach(function(button){button.addEventListener("click",function(){completeRound("skip");});});
+  document.querySelectorAll("[data-round-check]").forEach(function(button){button.addEventListener("click",checkRoundSpelling);});
+  document.querySelectorAll("[data-round-spelling-retry]").forEach(function(button){button.addEventListener("click",retryRoundSpelling);});
+  document.querySelectorAll("[data-round-spelling-next]").forEach(function(button){button.addEventListener("click",advanceRoundSpelling);});
+  if (round.stage==="spelling" && round.spellingPhase!=="answer") {
+    const input=document.getElementById("round-practice-input");
+    if (input) { input.addEventListener("keydown",function(event){if(event.key==="Enter")checkRoundSpelling();}); window.setTimeout(function(){input.focus();},0); }
+  }
 }
 function renderReviewCard(current, session) {
   const answerVisible=Boolean(session && session.phase === "answer");
@@ -519,7 +678,7 @@ function checkTypedAnswer(current) {
   session.typingCorrect=normalizeAnswer(value)===normalizeAnswer(current.prompt);
   recordFeedback(session.typingCorrect ? "remembered" : "forgot", current);
 }
-function renderReview() {
+function renderFreeReview() {
   const list=units();
   const fallbackQueue = dueUnits().length ? dueUnits() : list;
   const session = state.session && state.session.unit ? state.session : null;
@@ -551,6 +710,11 @@ function renderReview() {
     document.querySelectorAll("[data-repeat]").forEach(function(button){button.addEventListener("click",repeatReview);});
   }
 }
+function renderReview() {
+  if (validRound(state.round)) return renderActiveRound();
+  if (state.session && state.session.unit) return renderFreeReview();
+  return renderRoundStart();
+}
 function renderStats() {
   const metrics=learningStats();
   const days=recentDays();
@@ -558,8 +722,9 @@ function renderStats() {
   const bars=days.map(function(day){const height=day.count ? Math.max(12,Math.round(day.count/maxDaily*100)) : 4; return '<i style="height:'+height+'%" title="'+day.count+' 次复习"><span>'+day.label+'</span></i>';}).join("");
   document.getElementById("view-stats").innerHTML =
     head("LEARNING RECORD","慢慢积累，<em>看得见变化</em>。","这里不评判你，只记录你真正做过的练习，以及哪些内容值得再次出现.","")+
-    '<div class="stats-grid"><div class="stats-box"><h3>累计复习</h3><div class="big">'+metrics.totalReviews+'</div><div style="color:var(--muted);font-size:12px">次反馈</div></div><div class="stats-box"><h3>记得反馈</h3><div class="big">'+metrics.rememberedReviews+'</div><div style="color:var(--muted);font-size:12px">次选择“记得”</div></div><div class="stats-box"><h3>当前待复习</h3><div class="big">'+metrics.dueCards+'</div><div style="color:var(--muted);font-size:12px">张卡片到期</div></div></div>'+
-    '<div class="section-row" style="margin-top:35px"><h2>最近 7 天</h2><span style="color:var(--muted);font-size:12px">共 '+metrics.weekReviews+' 次复习 · 连续 '+metrics.streak+' 天</span></div><div class="stats-box"><div class="bar-chart">'+bars+'</div></div>';
+    '<div class="stats-grid"><div class="stats-box"><h3>累计复习</h3><div class="big">'+metrics.totalReviews+'</div><div style="color:var(--muted);font-size:12px">次反馈</div></div><div class="stats-box"><h3>记得反馈</h3><div class="big">'+metrics.rememberedReviews+'</div><div style="color:var(--muted);font-size:12px">次选择“记得”</div></div><div class="stats-box"><h3>当前待复习</h3><div class="big">'+metrics.dueCards+'</div><div style="color:var(--muted);font-size:12px">张卡片到期</div></div><div class="stats-box"><h3>完成学习轮次</h3><div class="big">'+metrics.completedRounds+'</div><div style="color:var(--muted);font-size:12px">轮已记录</div></div></div>'+
+    '<div class="section-row" style="margin-top:35px"><h2>最近 7 天</h2><span style="color:var(--muted);font-size:12px">共 '+metrics.weekReviews+' 次复习 · 连续 '+metrics.streak+' 天</span></div><div class="stats-box"><div class="bar-chart">'+bars+'</div></div>'+
+    '<div class="section-row" style="margin-top:35px"><h2>轮次历史</h2><span style="color:var(--muted);font-size:12px">最近 '+Math.min(10,state.rounds.length)+' 轮</span></div>'+ (state.rounds.length ? '<div class="round-history-list">'+state.rounds.slice(0,10).map(function(round){return '<div class="round-history-row"><strong>'+escapeHtml(round.sourceTitle)+'</strong><span>'+round.cardCount+' 个单元 · '+(round.spellingCompleted?"完成拼写":"跳过拼写")+' · 拼写错 '+(round.spellingWrong || 0)+' 次 · '+new Date(round.completedAt).toLocaleString()+'</span></div>';}).join("")+'</div>' : '<div class="empty">完成第一轮后，这里会留下你的学习轨迹。</div>');
   bind();
 }
 function bind() {
@@ -574,13 +739,27 @@ function bind() {
   document.querySelectorAll("[data-filter]").forEach(function(element){element.addEventListener("click",function(){state.filter=element.dataset.filter;renderLibrary();});});
 }
 function startSession(itemId) {
+  if (validRound(state.round)) {
+    setView("review");
+    notify("已恢复当前学习轮次");
+    return;
+  }
+  state.roundStartItemId=itemId || null;
+  state.session=null;
+  setView("review");
+  notify("请选择本轮数量并开始学习");
+}
+function startFreeSession(itemId) {
   const item=state.items.find(function(entry){return entry.id===itemId;}) || state.items[0];
+  if (!item) { setView("library"); return; }
   const itemUnits=item.units.map(function(unit,index){return Object.assign({},unit,{itemId:item.id,itemTitle:item.title,unitIndex:index});});
   const firstIndex=itemUnits.findIndex(function(unit){return cardSchedule(unit).dueAt<=Date.now();});
   const index=firstIndex < 0 ? 0 : firstIndex;
   state.session={itemId:item.id,baseQueue:itemUnits.slice(),queue:itemUnits,index:index,unit:itemUnits[index],phase:"prompt",feedback:null,repeats:[],repeatPass:false,typedAnswer:"",typingCorrect:null};
+  state.round=null;
+  persist();
   setView("review");
-  notify("已进入 "+item.title+" 的学习队列");
+  notify("已进入 "+item.title+" 的自由练习");
 }
 function sameCard(first, second) {
   return Boolean(first && second && first.itemId===second.itemId && first.prompt===second.prompt);
@@ -640,6 +819,99 @@ function repeatReview() {
   state.session.typingCorrect=null;
   renderReview();
   notify("再来一次");
+}
+function recordRoundFeedback(feedback) {
+  const round=state.round;
+  const current=roundCurrentCard(round);
+  if (!validRound(round) || round.stage!=="cards" || !current || round.cardPhase!=="prompt") return;
+  const rating=feedback==="forgot" ? "again" : "know";
+  state.logs.push({itemId:current.itemId,prompt:current.prompt,rating:rating,roundId:round.id,phase:"cards",at:new Date().toISOString()});
+  const item=state.items.find(function(entry){return entry.id===current.itemId;});
+  if (item) item.progress=Math.min(100,item.progress+(rating==="know"?4:1));
+  scheduleCard(current,rating);
+  round.cardPhase="answer";
+  round.cardFeedback=feedback;
+  if (feedback==="forgot") {
+    const key=roundCardKey(current);
+    const repeats=round.cardRepeats || (round.cardRepeats={});
+    if (!repeats[key]) { repeats[key]=1; round.cardQueue.push(Object.assign({},current)); }
+  }
+  persist();
+  renderActiveRound();
+  notify(feedback==="forgot" ? "答案已显示，这张卡会在本轮稍后重现" : "答案已显示，可以继续下一张");
+}
+function advanceRoundCard() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="cards") return;
+  round.cardIndex+=1;
+  round.cardPhase="prompt";
+  round.cardFeedback=null;
+  if (round.cardIndex>=round.cardQueue.length) {
+    round.stage="gate";
+  }
+  persist();
+  renderActiveRound();
+}
+function repeatRoundCard() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="cards") return;
+  round.cardPhase="prompt";
+  round.cardFeedback=null;
+  persist();
+  renderActiveRound();
+  notify("再来一次");
+}
+function enterRoundSpelling() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="gate") return;
+  round.stage="spelling";
+  round.spellingIndex=0;
+  round.spellingPhase="prompt";
+  round.typedAnswer="";
+  round.typingCorrect=null;
+  persist();
+  renderActiveRound();
+  notify("开始本轮拼写练习");
+}
+function checkRoundSpelling() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="spelling" || round.spellingPhase==="answer") return;
+  const input=document.getElementById("round-practice-input");
+  const value=input ? input.value.trim() : "";
+  if (!value) { notify("先输入英文答案"); if (input) input.focus(); return; }
+  const current=round.cards[round.spellingIndex];
+  const correct=normalizeAnswer(value)===normalizeAnswer(current.prompt);
+  const key=roundCardKey(current);
+  round.typedAnswer=value;
+  round.typingCorrect=correct;
+  round.spellingAttempts[key]=(round.spellingAttempts[key] || 0)+1;
+  if (!correct) round.spellingWrong+=1;
+  state.logs.push({itemId:current.itemId,prompt:current.prompt,rating:correct?"know":"again",roundId:round.id,phase:"spelling",at:new Date().toISOString()});
+  scheduleCard(current,correct?"know":"again");
+  round.spellingPhase="answer";
+  persist();
+  renderActiveRound();
+  notify(correct ? "拼写正确" : "答案会一直显示，请再写一次");
+}
+function retryRoundSpelling() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="spelling") return;
+  round.spellingPhase="prompt";
+  round.typedAnswer="";
+  round.typingCorrect=null;
+  persist();
+  renderActiveRound();
+}
+function advanceRoundSpelling() {
+  const round=state.round;
+  if (!validRound(round) || round.stage!=="spelling" || round.typingCorrect!==true) return;
+  round.spellingIndex+=1;
+  round.spellingPhase="prompt";
+  round.typedAnswer="";
+  round.typingCorrect=null;
+  if (round.spellingIndex>=round.cards.length) return completeRound("spelling");
+  persist();
+  renderActiveRound();
 }
 function parseSubtitleUnits(raw) {
   const parsed=[];
