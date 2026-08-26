@@ -161,6 +161,9 @@ const state = {
   session:null
 };
 
+const pronunciationCache = new Map();
+const pronunciationFetches = new Map();
+
 function load(kind, fallback) {
   try {
     const value = JSON.parse(localStorage.getItem(kind==="library"?LIB_KEY:LOG_KEY));
@@ -194,27 +197,38 @@ function speak(text) {
   window.speechSynthesis.cancel();
   const voice = new SpeechSynthesisUtterance(text);
   voice.lang = "en-US";
-  voice.rate = .86;
+  voice.rate = .9;
   voice.pitch = 1;
-  window.speechSynthesis.speak(voice);
+  // Queueing on the next task avoids Chrome occasionally delaying a freshly cancelled utterance.
+  window.setTimeout(function(){ window.speechSynthesis.speak(voice); }, 0);
 }
-async function playWord(text) {
-  const word = text.split(" ")[0].replace(/[^A-Za-z'-]/g,"");
-  if (word) {
-    try {
-      const response = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(word));
-      const data = await response.json();
+function playCachedAudio(url, fallback) {
+  const player = new Audio(url);
+  player.preload = "auto";
+  player.onerror = function(){ speak(fallback); };
+  const attempt = player.play();
+  if (attempt && typeof attempt.catch === "function") attempt.catch(function(){ speak(fallback); });
+}
+function warmPronunciation(text) {
+  const word = text.trim().split(/\s+/)[0].replace(/[^A-Za-z'-]/g, "").toLowerCase();
+  if (!word || pronunciationCache.has(word) || pronunciationFetches.has(word)) return;
+  const request = fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(word), {cache:"force-cache"})
+    .then(function(response){ return response.ok ? response.json() : null; })
+    .then(function(data){
       const item = data && data[0];
       const audio = item && item.phonetics && item.phonetics.find(function(entry){return entry.audio;});
-      if (audio && audio.audio) {
-        const player = new Audio(audio.audio);
-        player.onerror = function(){ speak(text); };
-        await player.play();
-        return;
-      }
-    } catch (error) {}
-  }
-  speak(text);
+      if (audio && audio.audio) pronunciationCache.set(word, audio.audio);
+    })
+    .catch(function(){})
+    .finally(function(){ pronunciationFetches.delete(word); });
+  pronunciationFetches.set(word, request);
+}
+function playWord(text) {
+  const word = text.trim().split(/\s+/)[0].replace(/[^A-Za-z'-]/g, "").toLowerCase();
+  // TTS is the immediate path. Online dictionary audio is only an enhancement for later clicks.
+  if (word && pronunciationCache.has(word)) playCachedAudio(pronunciationCache.get(word), text);
+  else speak(text);
+  warmPronunciation(text);
 }
 function setView(view) {
   state.view=view;
@@ -261,14 +275,13 @@ function renderLibrary() {
 function renderReview() {
   const list=units();
   const current=state.session && state.session.unit ? state.session.unit : list[0];
+  const answerVisible = Boolean(state.session && state.session.revealed);
   document.getElementById("view-review").innerHTML =
     head("SPACED REVIEW","复习队列，<em>按记忆出现</em>。","先凭记忆回答，再查看释义。每一次反馈都会让下一次复习更贴近你的真实状态.","")+
     '<div class="review-layout"><section class="review-card"><div class="review-kind">'+escapeHtml(current.kind)+" · "+escapeHtml(current.itemTitle)+'</div><div class="review-prompt">'+escapeHtml(current.prompt)+' <button class="icon-button" style="display:inline-grid;background:transparent;border-color:rgba(255,255,255,.25);color:var(--yellow);vertical-align:middle" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.context)+"</div>"+
-    (state.session && state.session.revealed ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
-    '<div class="review-buttons">'+(state.session && state.session.revealed ? '<button data-rate="again">再来一次</button><button data-rate="hard">有点模糊</button><button data-rate="know">记住了</button>' : '<button class="sound-btn" data-word-sound="'+escapeHtml(current.prompt)+'">听发音</button><button data-reveal>显示答案</button>')+'</div></section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+list.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+"</span></div></div>";}).join("")+"</aside></div>";
+    (answerVisible ? '<div class="answer">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+"</div>" : "")+
+    '<div class="review-buttons"><button class="sound-btn" data-word-sound="'+escapeHtml(current.prompt)+'">听发音</button><button data-rate="again">再来一次</button><button data-rate="hard">有点模糊</button><button data-rate="know">记住了</button></div></section><aside class="queue"><div class="kicker">UP NEXT</div><h3>接下来会遇到</h3>'+list.slice(0,5).map(function(unit){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+"</span></div></div>";}).join("")+"</aside></div>";
   bind();
-  const reveal=document.querySelector("[data-reveal]");
-  if (reveal) reveal.addEventListener("click",function(){state.session=Object.assign({},state.session || {},{unit:current,revealed:true});renderReview();});
   document.querySelectorAll("[data-rate]").forEach(function(button){button.addEventListener("click",function(){rateCard(button.dataset.rate,current);});});
 }
 function renderStats() {
@@ -297,10 +310,26 @@ function rateCard(rating, current) {
   state.logs.push({itemId:state.session ? state.session.itemId : current.itemId,prompt:current.prompt,rating:rating,at:new Date().toISOString()});
   const item=state.items.find(function(entry){return entry.id===(state.session ? state.session.itemId : current.itemId);});
   if (item) item.progress=Math.min(100,item.progress+(rating==="know"?4:rating==="hard"?2:1));
-  const list=units(), index=list.findIndex(function(unit){return unit.prompt===current.prompt && unit.itemId===current.itemId;});
-  const next=list[(Math.max(0,index)+1)%list.length];
-  state.session={itemId:next.itemId,unit:next,revealed:false};
-  persist(); renderReview(); notify(rating==="know" ? "已加入更远的复习间隔" : "会更快再次出现");
+  const list=units();
+  const index=list.findIndex(function(unit){return unit.prompt===current.prompt && unit.itemId===current.itemId;});
+  if (rating === "know") {
+    const next=list[(Math.max(0,index)+1)%list.length];
+    state.session={itemId:next.itemId,unit:next,revealed:false};
+    persist(); renderReview(); notify("已加入更远的复习间隔");
+    return;
+  }
+  if (rating === "hard") {
+    state.session={itemId:current.itemId,unit:current,revealed:true};
+    persist(); renderReview(); notify("答案已显示，马上再来一次");
+    window.setTimeout(function(){
+      if (!state.session || state.session.unit.prompt !== current.prompt || !state.session.revealed) return;
+      state.session={itemId:current.itemId,unit:current,revealed:false};
+      renderReview();
+    }, 1200);
+    return;
+  }
+  state.session={itemId:current.itemId,unit:current,revealed:false};
+  persist(); renderReview(); notify("这张卡片会马上再出现");
 }
 function openImport() {
   document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>导入学习内容</h2><button class="close-btn" id="close-modal">×</button></div><div class="form-grid"><label>标题<input id="import-title" placeholder="例如：Friends · Season 01"></label><label>内容类型<select id="import-type"><option>单词书</option><option>歌曲笔记</option><option>影视台词</option><option>文章</option></select></label><label>粘贴 Markdown、CSV 或 TXT<textarea id="import-text" placeholder="# Vocabulary\n\n- retain：保留；记住\n- context：语境\n\n## Phrases\n- in context：在语境中"></textarea></label><label>或选择文件<input id="import-file" type="file" accept=".md,.txt,.csv"></label></div><div class="modal-actions"><button class="quiet-btn" id="cancel-import">取消</button><button class="primary-btn" id="confirm-import">导入并建立学习卡片</button></div></div></div>';
