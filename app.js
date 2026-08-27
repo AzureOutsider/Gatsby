@@ -531,21 +531,29 @@ function selectRoundCards(sourceId, size) {
 }
 function roundCardKey(unit) { return cardKey(unit); }
 function roundCurrentCard(round) { return round && round.cardQueue ? round.cardQueue[round.cardIndex] : null; }
+function roundCurrentSpellingCard(round) { return round && round.spellingQueue ? round.spellingQueue[round.spellingIndex] : null; }
+function ensureSpellingQueue(round) {
+  if (!round || !Array.isArray(round.cards) || !round.cards.length) return;
+  if (!Array.isArray(round.spellingQueue) || !round.spellingQueue.length) {
+    round.spellingQueue=round.cards.slice();
+    round.spellingIndex=Math.max(0,Math.min(Number(round.spellingIndex) || 0,round.spellingQueue.length-1));
+  }
+}
 function roundLabel(round) {
   if (!round) return "";
   if (round.stage==="cards") return "翻卡 " + Math.min(round.cardIndex+1,round.cardQueue.length) + " / " + round.cardQueue.length;
   if (round.stage==="gate") return "翻卡已完成";
-  if (round.stage==="spelling") return "拼写 " + Math.min(round.spellingIndex+1,round.cards.length) + " / " + round.cards.length;
+  if (round.stage==="spelling") return "拼写 " + Math.min(round.spellingIndex+1,round.spellingQueue.length) + " / " + round.spellingQueue.length;
   return "本轮已完成";
 }
 function roundQueueMarkup(round) {
   let queue=[];
   if (round.stage==="cards") queue=round.cardQueue.slice(round.cardIndex+1);
-  if (round.stage==="spelling") queue=round.cards.slice(round.spellingIndex+1);
+  if (round.stage==="spelling") queue=round.spellingQueue.slice(round.spellingIndex+1);
   return queue.slice(0,5).map(function(unit,index){return '<div class="queue-item"><div class="queue-bar"></div><div><strong>'+escapeHtml(unit.prompt)+'</strong><span>'+escapeHtml(unit.kind)+" · "+escapeHtml(unit.itemTitle)+(index===0 ? " · 下一张" : "")+'</span></div></div>';}).join("");
 }
 function roundProgressMarkup(round) {
-  const total=round.stage==="cards" ? round.cardQueue.length : round.cards.length;
+  const total=round.stage==="cards" ? round.cardQueue.length : round.stage==="spelling" ? round.spellingQueue.length : round.cards.length;
   const done=round.stage==="spelling" ? round.spellingIndex : round.stage==="gate" || round.stage==="complete" ? total : Math.min(round.cardIndex,total);
   return '<div class="round-progress"><div class="round-progress-top"><span>第 '+escapeHtml(round.id.replace(/^round-/,""))+' 轮</span><strong>'+escapeHtml(roundLabel(round))+'</strong></div><div class="round-progress-track"><i style="width:'+Math.round(done/total*100)+'%"></i></div></div>';
 }
@@ -557,7 +565,7 @@ function createRound(sourceId, size) {
     id:"round-"+Date.now(), itemId:sourceId && sourceId!=="all" ? sourceId : null, sourceTitle:sourceTitle,
     requestedSize:Number(size), cards:cards, cardQueue:cards.slice(), cardIndex:0, cardPhase:"prompt", cardFeedback:null,
     cardRepeats:{}, stage:"cards", spellingIndex:0, spellingPhase:"prompt", typedAnswer:"", typingCorrect:null,
-    spellingAttempts:{}, spellingWrong:0, startedAt:new Date().toISOString(), completedAt:null
+    spellingQueue:cards.slice(), spellingAttempts:{}, spellingWrong:0, startedAt:new Date().toISOString(), completedAt:null
   };
   state.session=null;
   state.roundStartItemId=null;
@@ -609,17 +617,19 @@ function renderRoundGate(round) {
   return '<section class="round-gate"><div class="kicker">FLASHCARDS COMPLETE</div><h2>翻卡复习完成</h2><p>这一轮的 '+round.cards.length+' 个学习单元已经看过。现在可以把刚才的内容再写一遍，巩固拼写和回忆。</p><div class="round-gate-stats"><span><strong>'+round.cards.length+'</strong> 个单元</span><span><strong>'+Object.keys(round.cardRepeats || {}).length+'</strong> 个稍后重现</span></div><div class="review-buttons"><button class="primary-btn" data-enter-spelling>进入拼写练习</button><button class="quiet-btn" data-finish-round>结束本轮</button></div></section>';
 }
 function renderRoundSpelling(round) {
-  const current=round.cards[round.spellingIndex];
+  ensureSpellingQueue(round);
+  const current=roundCurrentSpellingCard(round);
   if (!current) return "";
   const answerVisible=round.spellingPhase==="answer";
   const header='<div class="review-kind">本轮拼写 · '+escapeHtml(current.kind)+' · '+escapeHtml(current.itemTitle)+'</div>';
   if (!answerVisible) return '<section class="review-card spelling-card">'+header+'<div class="spelling-instruction">根据中文释义写出刚才复习过的英文</div><div class="spelling-hint-row"><div class="spelling-hint">'+escapeHtml(current.answer)+'</div><button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放参考发音">♪</button></div><div class="review-context spelling-context">'+escapeHtml(maskPrompt(current.context,current.prompt))+'</div><div class="spelling-entry"><input id="round-practice-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="输入英文答案"><button class="primary-btn" data-round-check>检查答案</button></div></section>';
   const correct=round.typingCorrect===true;
-  return '<section class="review-card spelling-card">'+header+'<div class="spelling-result '+(correct?"typing-correct":"typing-incorrect")+'">'+(correct?"拼写正确":"还不正确，再写一次")+'</div><div class="typed-answer">你的答案：'+escapeHtml(round.typedAnswer || "未填写")+'</div><div class="answer">答案：'+escapeHtml(current.prompt)+' <button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+'</div><div class="review-buttons">'+(correct?'<button data-round-spelling-next>下一个</button>':'<button data-round-spelling-retry>再来一次</button>')+'</div></section>';
+  return '<section class="review-card spelling-card">'+header+'<div class="spelling-result '+(correct?"typing-correct":"typing-incorrect")+'">'+(correct?"拼写正确":"先记住答案，稍后再来")+'</div><div class="typed-answer">你的答案：'+escapeHtml(round.typedAnswer || "未填写")+'</div><div class="answer">答案：'+escapeHtml(current.prompt)+' <button class="icon-button spelling-sound" data-word-sound="'+escapeHtml(current.prompt)+'" title="播放发音">♪</button></div><div class="review-context">'+escapeHtml(current.answer)+'</div><div class="review-context" style="margin-top:8px">'+escapeHtml(current.note)+'</div><div class="review-buttons"><button data-round-spelling-next>'+ (correct ? '下一个' : '继续下一张') +'</button></div></section>';
 }
 function renderActiveRound() {
   const round=state.round;
   if (!validRound(round)) { state.round=null; persist(); renderRoundStart(); return; }
+  if (round.stage==="spelling") ensureSpellingQueue(round);
   let body="";
   if (round.stage==="cards") body=renderRoundCard(round);
   if (round.stage==="gate") body=renderRoundGate(round);
@@ -633,7 +643,6 @@ function renderActiveRound() {
   document.querySelectorAll("[data-enter-spelling]").forEach(function(button){button.addEventListener("click",enterRoundSpelling);});
   document.querySelectorAll("[data-finish-round]").forEach(function(button){button.addEventListener("click",function(){completeRound("skip");});});
   document.querySelectorAll("[data-round-check]").forEach(function(button){button.addEventListener("click",checkRoundSpelling);});
-  document.querySelectorAll("[data-round-spelling-retry]").forEach(function(button){button.addEventListener("click",retryRoundSpelling);});
   document.querySelectorAll("[data-round-spelling-next]").forEach(function(button){button.addEventListener("click",advanceRoundSpelling);});
   if (round.stage==="spelling" && round.spellingPhase!=="answer") {
     const input=document.getElementById("round-practice-input");
@@ -865,6 +874,7 @@ function enterRoundSpelling() {
   const round=state.round;
   if (!validRound(round) || round.stage!=="gate") return;
   round.stage="spelling";
+  round.spellingQueue=round.cards.slice();
   round.spellingIndex=0;
   round.spellingPhase="prompt";
   round.typedAnswer="";
@@ -876,40 +886,36 @@ function enterRoundSpelling() {
 function checkRoundSpelling() {
   const round=state.round;
   if (!validRound(round) || round.stage!=="spelling" || round.spellingPhase==="answer") return;
+  ensureSpellingQueue(round);
   const input=document.getElementById("round-practice-input");
   const value=input ? input.value.trim() : "";
   if (!value) { notify("先输入英文答案"); if (input) input.focus(); return; }
-  const current=round.cards[round.spellingIndex];
+  const current=roundCurrentSpellingCard(round);
   const correct=normalizeAnswer(value)===normalizeAnswer(current.prompt);
   const key=roundCardKey(current);
   round.typedAnswer=value;
   round.typingCorrect=correct;
   round.spellingAttempts[key]=(round.spellingAttempts[key] || 0)+1;
-  if (!correct) round.spellingWrong+=1;
+  if (!correct) {
+    round.spellingWrong+=1;
+    round.spellingQueue.push(Object.assign({},current));
+  }
   state.logs.push({itemId:current.itemId,prompt:current.prompt,rating:correct?"know":"again",roundId:round.id,phase:"spelling",at:new Date().toISOString()});
   scheduleCard(current,correct?"know":"again");
   round.spellingPhase="answer";
   persist();
   renderActiveRound();
-  notify(correct ? "拼写正确" : "答案会一直显示，请再写一次");
-}
-function retryRoundSpelling() {
-  const round=state.round;
-  if (!validRound(round) || round.stage!=="spelling") return;
-  round.spellingPhase="prompt";
-  round.typedAnswer="";
-  round.typingCorrect=null;
-  persist();
-  renderActiveRound();
+  notify(correct ? "拼写正确" : "答案已显示，这个词会在本轮末尾再次出现");
 }
 function advanceRoundSpelling() {
   const round=state.round;
-  if (!validRound(round) || round.stage!=="spelling" || round.typingCorrect!==true) return;
+  if (!validRound(round) || round.stage!=="spelling" || round.spellingPhase!=="answer") return;
+  ensureSpellingQueue(round);
   round.spellingIndex+=1;
   round.spellingPhase="prompt";
   round.typedAnswer="";
   round.typingCorrect=null;
-  if (round.spellingIndex>=round.cards.length) return completeRound("spelling");
+  if (round.spellingIndex>=round.spellingQueue.length) return completeRound("spelling");
   persist();
   renderActiveRound();
 }
