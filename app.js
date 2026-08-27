@@ -219,6 +219,14 @@ function persist() {
   localStorage.setItem(ROUND_SIZE_KEY, String(state.roundSize));
   localStorage.setItem(DAILY_GOAL_KEY, String(state.dailyGoal));
 }
+function ensureSeedContent() {
+  if (state.items.some(function(item){return item.id === "viva-la-vida";})) return;
+  const viva=seed.find(function(item){return item.id === "viva-la-vida";});
+  if (!viva) return;
+  state.items.push(JSON.parse(JSON.stringify(viva)));
+  persist();
+}
+ensureSeedContent();
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[&<>"']/g, function(char) {
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char];
