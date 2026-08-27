@@ -5,6 +5,8 @@ const MODE_KEY = "english-study-practice-mode-v1";
 const ROUND_KEY = "english-study-round-v1";
 const ROUNDS_KEY = "english-study-rounds-v1";
 const ROUND_SIZE_KEY = "english-study-round-size-v1";
+const DAILY_GOAL_KEY = "english-study-daily-goal-v1";
+const DATA_EXPORT_VERSION = 1;
 
 const seed = [
   {
@@ -169,6 +171,7 @@ const state = {
   round:loadObject(ROUND_KEY, null),
   rounds:loadArray(ROUNDS_KEY, []),
   roundSize:loadRoundSize(),
+  dailyGoal:loadDailyGoal(),
   roundStartItemId:null
 };
 
@@ -202,6 +205,10 @@ function loadRoundSize() {
   const value=Number.parseInt(localStorage.getItem(ROUND_SIZE_KEY),10);
   return [5,10,15,20].indexOf(value)>=0 ? value : 10;
 }
+function loadDailyGoal() {
+  const value=Number.parseInt(localStorage.getItem(DAILY_GOAL_KEY),10);
+  return [5,10,20,30].indexOf(value)>=0 ? value : 10;
+}
 function persist() {
   localStorage.setItem(LIB_KEY, JSON.stringify(state.items));
   localStorage.setItem(LOG_KEY, JSON.stringify(state.logs));
@@ -210,6 +217,7 @@ function persist() {
   localStorage.setItem(ROUND_KEY, state.round ? JSON.stringify(state.round) : "null");
   localStorage.setItem(ROUNDS_KEY, JSON.stringify(state.rounds));
   localStorage.setItem(ROUND_SIZE_KEY, String(state.roundSize));
+  localStorage.setItem(DAILY_GOAL_KEY, String(state.dailyGoal));
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replace(/[&<>"']/g, function(char) {
@@ -320,6 +328,8 @@ function learningStats() {
     const timestamp=new Date(log.at).getTime();
     return !Number.isNaN(timestamp) && timestamp>=weekStart.getTime();
   }).length;
+  const todayKey=dayKey(new Date());
+  const todayReviews=state.logs.filter(function(log){return dayKey(log.at)===todayKey;}).length;
   return {
     totalReviews:totalReviews,
     rememberedReviews:rememberedReviews,
@@ -328,8 +338,18 @@ function learningStats() {
     weekReviews:weekReviews,
     streak:currentStreak(),
     sourceCount:new Set(state.items.map(function(item){return item.type;})).size,
-    completedRounds:state.rounds.length
+    completedRounds:state.rounds.length,
+    todayReviews:todayReviews,
+    dailyGoal:state.dailyGoal
   };
+}
+function weakUnits(limit) {
+  return units().map(function(unit){
+    const schedule=cardSchedule(unit);
+    return {unit:unit,schedule:schedule};
+  }).filter(function(entry){return entry.schedule.lapses>0 || entry.schedule.lastRating==="again";}).sort(function(first,second){
+    return (second.schedule.lapses-first.schedule.lapses) || (first.schedule.dueAt-second.schedule.dueAt);
+  }).slice(0,limit || 8);
 }
 function notify(message) {
   const root = document.getElementById("toast-root");
@@ -344,6 +364,79 @@ function isTypingTarget(target) {
 function openShortcutHelp() {
   document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal shortcut-modal"><div class="modal-head"><h2>键盘快捷键</h2><button class="close-btn" id="close-shortcuts" aria-label="关闭快捷键说明">×</button></div><div class="shortcut-groups"><div><h3>全局导航</h3><p><kbd>Ctrl</kbd> + <kbd>1</kbd> 今日学习</p><p><kbd>Ctrl</kbd> + <kbd>2</kbd> 内容库</p><p><kbd>Ctrl</kbd> + <kbd>3</kbd> 复习队列</p><p><kbd>Ctrl</kbd> + <kbd>4</kbd> 学习记录</p><p><kbd>Ctrl</kbd> + <kbd>K</kbd> 搜索内容</p></div><div><h3>复习操作</h3><p><kbd>1</kbd> 不记得　<kbd>2</kbd> 记得</p><p><kbd>Enter</kbd> / <kbd>→</kbd> 下一个</p><p><kbd>R</kbd> 再来一次</p><p><kbd>P</kbd> 播放发音</p><p><kbd>Esc</kbd> 暂存并离开</p></div><div><h3>轮次流程</h3><p><kbd>Enter</kbd> 开始轮次</p><p><kbd>S</kbd> 进入拼写　<kbd>N</kbd> 跳过拼写</p><p><kbd>Enter</kbd> 提交拼写 / 继续下一张</p><p><kbd>?</kbd> 查看本说明</p></div></div></div></div>';
   document.getElementById("close-shortcuts").onclick=closeModal;
+}
+function buildExportData() {
+  return {version:DATA_EXPORT_VERSION,exportedAt:new Date().toISOString(),items:state.items,logs:state.logs,schedule:state.schedule,rounds:state.rounds,round:state.round,roundSize:state.roundSize,dailyGoal:state.dailyGoal,practiceMode:state.practiceMode};
+}
+function openDataTools() {
+  document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal data-modal"><div class="modal-head"><h2>学习数据</h2><button class="close-btn" id="close-data-tools" aria-label="关闭学习数据">×</button></div><p class="data-modal-intro">导出可以备份内容、复习记录和未完成轮次；导入时可选择覆盖本机数据或合并到现有数据。</p><div class="data-actions"><button class="primary-btn" id="export-data">导出 JSON 备份</button><label class="file-button">选择备份文件<input id="import-data-file" type="file" accept=".json,application/json"></label><select id="import-data-mode"><option value="merge">合并到本地数据</option><option value="replace">覆盖本地数据</option></select><button class="quiet-btn" id="import-data-confirm" disabled>导入选中的文件</button></div><div class="data-status" id="data-status">尚未选择备份文件</div></div></div>';
+  document.getElementById("close-data-tools").onclick=closeModal;
+  document.getElementById("export-data").onclick=exportData;
+  const fileInput=document.getElementById("import-data-file");
+  const importButton=document.getElementById("import-data-confirm");
+  if (fileInput) fileInput.addEventListener("change",function(){importButton.disabled=!fileInput.files || !fileInput.files[0];const status=document.getElementById("data-status");if(status)status.textContent=fileInput.files && fileInput.files[0] ? "已选择："+fileInput.files[0].name : "尚未选择备份文件";});
+  if (importButton) importButton.onclick=importDataFile;
+}
+function exportData() {
+  const payload=JSON.stringify(buildExportData(),null,2);
+  const blob=new Blob([payload],{type:"application/json;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download="english-study-backup-"+dayKey(new Date())+".json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(function(){URL.revokeObjectURL(url);},0);
+  notify("学习数据已导出");
+}
+function isValidImport(payload) {
+  return Boolean(payload && typeof payload==="object" && Array.isArray(payload.items) && Array.isArray(payload.logs) && payload.schedule && typeof payload.schedule==="object" && Array.isArray(payload.rounds));
+}
+function mergeImportedData(payload) {
+  const itemMap=new Map(state.items.map(function(item){return [item.id,item];}));
+  payload.items.forEach(function(item){if(item && item.id && Array.isArray(item.units)) itemMap.set(String(item.id),item);});
+  state.items=Array.from(itemMap.values());
+  state.logs=state.logs.concat(payload.logs.filter(function(log){return log && typeof log==="object";}));
+  const seenLogs=new Set();
+  state.logs=state.logs.filter(function(log){const key=[log.at,log.itemId,log.prompt,log.roundId,log.phase,log.rating].join("|");if(seenLogs.has(key))return false;seenLogs.add(key);return true;});
+  state.schedule=Object.assign({},state.schedule,payload.schedule);
+  const roundMap=new Map(state.rounds.map(function(round){return [round.id,round];}));
+  payload.rounds.forEach(function(round){if(round && round.id) roundMap.set(String(round.id),round);});
+  state.rounds=Array.from(roundMap.values()).sort(function(first,second){return String(second.completedAt || "").localeCompare(String(first.completedAt || ""));}).slice(0,100);
+  if (!state.round && validRound(payload.round)) state.round=payload.round;
+  if ([5,10,15,20].indexOf(Number(payload.roundSize))>=0) state.roundSize=Number(payload.roundSize);
+  if ([5,10,20,30].indexOf(Number(payload.dailyGoal))>=0) state.dailyGoal=Number(payload.dailyGoal);
+  if (["cards","spelling","cloze"].indexOf(payload.practiceMode)>=0) state.practiceMode=payload.practiceMode;
+}
+function replaceImportedData(payload) {
+  state.items=payload.items;
+  state.logs=payload.logs;
+  state.schedule=payload.schedule;
+  state.rounds=payload.rounds;
+  state.round=validRound(payload.round) ? payload.round : null;
+  state.roundSize=[5,10,15,20].indexOf(Number(payload.roundSize))>=0 ? Number(payload.roundSize) : 10;
+  state.dailyGoal=[5,10,20,30].indexOf(Number(payload.dailyGoal))>=0 ? Number(payload.dailyGoal) : 10;
+  state.practiceMode=["cards","spelling","cloze"].indexOf(payload.practiceMode)>=0 ? payload.practiceMode : "cards";
+  state.session=null;
+}
+function importDataFile() {
+  const input=document.getElementById("import-data-file");
+  const mode=document.getElementById("import-data-mode");
+  const file=input && input.files ? input.files[0] : null;
+  if (!file) { notify("请先选择 JSON 备份文件"); return; }
+  const reader=new FileReader();
+  reader.onload=function(){
+    let payload;
+    try { payload=JSON.parse(reader.result); } catch (error) { notify("备份文件不是有效 JSON"); return; }
+    if (!isValidImport(payload)) { notify("备份文件格式不完整"); return; }
+    if (Number(payload.version || 1)>DATA_EXPORT_VERSION) { notify("备份文件版本较新，请先更新学习平台"); return; }
+    if (mode && mode.value==="replace" && !window.confirm("覆盖会替换本机内容、记录和当前轮次，确定继续吗？")) return;
+    if (mode && mode.value==="replace") replaceImportedData(payload); else mergeImportedData(payload);
+    persist(); closeModal(); render(); notify(mode && mode.value==="replace" ? "已覆盖本地学习数据" : "已合并学习数据");
+  };
+  reader.onerror=function(){notify("读取备份文件失败");};
+  reader.readAsText(file);
 }
 function leavePractice() {
   if (document.getElementById("modal-root").innerHTML) { closeModal(); return; }
@@ -482,9 +575,12 @@ function renderHome() {
   }
   const featuredProgress=itemProgress(featured);
   const streakText=metrics.streak ? "已连续学习 "+metrics.streak+" 天" : "从今天开始第一天";
+  const activeRound=validRound(state.round);
+  if (activeRound && state.round.stage==="spelling") ensureSpellingQueue(state.round);
+  const roundBanner=activeRound ? '<section class="resume-strip"><div><div class="kicker">CURRENT ROUND</div><h2>'+escapeHtml(state.round.sourceTitle)+'</h2><p>'+escapeHtml(roundLabel(state.round))+' · 进度已自动保存</p></div><button class="primary-btn" data-view-link="review">继续当前轮次</button></section>' : "";
   document.getElementById("view-home").innerHTML =
     head("WEDNESDAY · 26 AUG 2026","今天，学一点 <em>真正用得上</em> 的英语。","把内容拆成小块，先理解，再回忆，最后让它在几天后重新出现。","")+
-    '<div class="hero-grid"><section class="hero-card"><div><div class="eyebrow" style="color:var(--yellow)">CONTINUE WHERE YOU LEFT OFF</div><h2>'+escapeHtml(featured.title)+'</h2><div class="hero-meta">'+escapeHtml(featured.author)+" · "+featured.units.length+' 个学习单元</div></div><div class="hero-controls"><button class="play-btn" data-speak="'+escapeHtml(featured.units[0].context)+'" title="播放句子">▶</button><div class="hero-progress"><i style="width:'+featuredProgress+'%"></i></div><button class="quiet-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" data-start="'+featured.id+'">继续学习</button></div></section><section class="side-card"><div><div class="kicker">TODAY\'S REVIEW</div><h3>复习不是回头，<br>是让记忆留下来。</h3></div><div><div class="stat-big">'+metrics.dueCards+' <small>张卡片待复习</small></div><div class="streak"><span class="fire">◒</span> '+streakText+'</div></div></section></div>'+
+    roundBanner+'<div class="hero-grid"><section class="hero-card"><div><div class="eyebrow" style="color:var(--yellow)">'+(activeRound ? "CONTINUE YOUR ROUND" : "CONTINUE WHERE YOU LEFT OFF")+'</div><h2>'+escapeHtml(featured.title)+'</h2><div class="hero-meta">'+escapeHtml(featured.author)+" · "+featured.units.length+' 个学习单元</div></div><div class="hero-controls"><button class="play-btn" data-speak="'+escapeHtml(featured.units[0].context)+'" title="播放句子">▶</button><div class="hero-progress"><i style="width:'+featuredProgress+'%"></i></div><button class="quiet-btn" style="color:var(--paper);border-color:rgba(255,255,255,.25)" data-start="'+featured.id+'">继续学习</button></div></section><section class="side-card"><div><div class="kicker">TODAY\'S REVIEW</div><h3>复习不是回头，<br>是让记忆留下来。</h3></div><div><div class="stat-big">'+metrics.dueCards+' <small>张卡片待复习</small></div><div class="streak"><span class="fire">◒</span> '+streakText+'</div><div class="daily-goal"><div><span>今日目标</span><strong>'+Math.min(metrics.todayReviews,metrics.dailyGoal)+' / '+metrics.dailyGoal+'</strong></div><div class="daily-goal-track"><i style="width:'+Math.min(100,Math.round(metrics.todayReviews/metrics.dailyGoal*100))+'%"></i></div></div></div></section></div>'+
     '<div class="metrics"><div class="metric"><div class="metric-label">已掌握卡片</div><div class="metric-value">'+metrics.masteredCards+'</div></div><div class="metric"><div class="metric-label">学习内容</div><div class="metric-value">'+state.items.length+'</div></div><div class="metric"><div class="metric-label">本周复习</div><div class="metric-value">'+metrics.weekReviews+' <small>次</small></div></div><div class="metric"><div class="metric-label">学习来源</div><div class="metric-value">'+metrics.sourceCount+' <small>类</small></div></div></div>'+
     '<div class="section-row"><h2>接下来学什么</h2><a data-view-link="library">查看全部内容 →</a></div><div class="content-list">'+state.items.slice(0,4).map(function(item,index){return '<div class="content-row"><div class="content-index">0'+(index+1)+'</div><div><div class="content-title">'+escapeHtml(item.title)+'</div><div class="content-sub">'+escapeHtml(item.author)+" · "+item.units.length+' 个单元</div></div><span class="content-tag">'+escapeHtml(item.type)+'</span><div class="progress-mini"><i style="width:'+itemProgress(item)+'%"></i></div><span class="row-arrow" data-start="'+item.id+'">→</span></div>';}).join("")+"</div>";
   bind();
@@ -594,7 +690,7 @@ function maskPrompt(context, prompt) {
   catch (error) { return String(context); }
 }
 function normalizeAnswer(value) {
-  return String(value || "").toLowerCase().replace(/[’‘']/g,"").replace(/[-–—]/g," ").replace(/[.!?,;:]+$/g,"").replace(/\s+/g," ").trim();
+  return String(value || "").normalize("NFKC").toLowerCase().replace(/[’‘'`]/g,"").replace(/[-–—_/]/g," ").replace(/[.!?,;:()[\]{}"“”]+/g," ").replace(/\s+/g," ").trim();
 }
 function roundSourceUnits(sourceId) {
   if (sourceId && sourceId!=="all") {
@@ -673,6 +769,20 @@ function completeRound(reason) {
   renderReview();
   notify(reason==="skip" ? "本轮已结束，记录已保存" : "本轮学习完成，记录已保存");
 }
+function leaveRound() {
+  if (!validRound(state.round)) return;
+  persist();
+  setView("home");
+  notify("本轮进度已保存");
+}
+function abandonRound() {
+  if (!validRound(state.round)) return;
+  if (!window.confirm("放弃当前轮次？本轮不会进入完成记录，但已经产生的复习反馈会保留。")) return;
+  state.round=null;
+  persist();
+  setView("review");
+  notify("当前轮次已放弃");
+}
 function renderRoundStart() {
   const selected=state.roundStartItemId && state.items.some(function(item){return item.id===state.roundStartItemId;}) ? state.roundStartItemId : "all";
   const options='<option value="all" '+(selected==="all"?"selected":"")+'>全部内容（按到期优先）</option>'+state.items.map(function(item){return '<option value="'+escapeHtml(item.id)+'" '+(selected===item.id?"selected":"")+'>'+escapeHtml(item.title)+' · '+item.units.length+' 个单元</option>';}).join("");
@@ -716,13 +826,16 @@ function renderActiveRound() {
   if (round.stage==="gate") body=renderRoundGate(round);
   if (round.stage==="spelling") body=renderRoundSpelling(round);
   const queue=round.stage==="gate" ? [] : roundQueueMarkup(round);
-  document.getElementById("view-review").innerHTML=head("LEARNING ROUND",escapeHtml(round.sourceTitle)+' · <em>'+escapeHtml(roundLabel(round))+'</em>',"本轮进度会自动保存。你可以随时关闭程序，之后从这里继续。",roundProgressMarkup(round))+'<div class="review-layout">'+body+'<aside class="queue"><div class="kicker">ROUND QUEUE</div><h3>本轮接下来</h3>'+(queue || '<div class="empty">这一阶段没有待处理内容。</div>')+'</aside></div>';
+  const roundActions='<div class="round-head-actions">'+roundProgressMarkup(round)+'<div class="round-head-buttons"><button class="quiet-btn" data-leave-round>暂存并离开</button><button class="text-btn" data-abandon-round>放弃本轮</button></div></div>';
+  document.getElementById("view-review").innerHTML=head("LEARNING ROUND",escapeHtml(round.sourceTitle)+' · <em>'+escapeHtml(roundLabel(round))+'</em>',"本轮进度会自动保存。你可以随时关闭程序，之后从这里继续。",roundActions)+'<div class="review-layout">'+body+'<aside class="queue"><div class="kicker">ROUND QUEUE</div><h3>本轮接下来</h3>'+(queue || '<div class="empty">这一阶段没有待处理内容。</div>')+'</aside></div>';
   bind();
   document.querySelectorAll("[data-round-feedback]").forEach(function(button){button.addEventListener("click",function(){recordRoundFeedback(button.dataset.roundFeedback);});});
   document.querySelectorAll("[data-round-next]").forEach(function(button){button.addEventListener("click",advanceRoundCard);});
   document.querySelectorAll("[data-round-repeat]").forEach(function(button){button.addEventListener("click",repeatRoundCard);});
   document.querySelectorAll("[data-enter-spelling]").forEach(function(button){button.addEventListener("click",enterRoundSpelling);});
   document.querySelectorAll("[data-finish-round]").forEach(function(button){button.addEventListener("click",function(){completeRound("skip");});});
+  document.querySelectorAll("[data-leave-round]").forEach(function(button){button.addEventListener("click",leaveRound);});
+  document.querySelectorAll("[data-abandon-round]").forEach(function(button){button.addEventListener("click",abandonRound);});
   document.querySelectorAll("[data-round-check]").forEach(function(button){button.addEventListener("click",checkRoundSpelling);});
   document.querySelectorAll("[data-round-spelling-next]").forEach(function(button){button.addEventListener("click",advanceRoundSpelling);});
   if (round.stage==="spelling" && round.spellingPhase!=="answer") {
@@ -808,14 +921,21 @@ function renderReview() {
 function renderStats() {
   const metrics=learningStats();
   const days=recentDays();
+  const weak=weakUnits(8);
+  const goalOptions=[5,10,20,30].map(function(goal){return '<option value="'+goal+'" '+(state.dailyGoal===goal?"selected":"")+'>'+goal+' 次</option>';}).join("");
   const maxDaily=Math.max(1,...days.map(function(day){return day.count;}));
   const bars=days.map(function(day){const height=day.count ? Math.max(12,Math.round(day.count/maxDaily*100)) : 4; return '<i style="height:'+height+'%" title="'+day.count+' 次复习"><span>'+day.label+'</span></i>';}).join("");
   document.getElementById("view-stats").innerHTML =
-    head("LEARNING RECORD","慢慢积累，<em>看得见变化</em>。","这里不评判你，只记录你真正做过的练习，以及哪些内容值得再次出现.","")+
+    head("LEARNING RECORD","慢慢积累，<em>看得见变化</em>。","这里不评判你，只记录你真正做过的练习，以及哪些内容值得再次出现.",'<div class="stats-head-actions"><label>每日目标<select id="daily-goal">'+goalOptions+'</select></label><button class="primary-btn" id="open-data-tools">数据管理</button></div>')+
     '<div class="stats-grid"><div class="stats-box"><h3>累计复习</h3><div class="big">'+metrics.totalReviews+'</div><div style="color:var(--muted);font-size:12px">次反馈</div></div><div class="stats-box"><h3>记得反馈</h3><div class="big">'+metrics.rememberedReviews+'</div><div style="color:var(--muted);font-size:12px">次选择“记得”</div></div><div class="stats-box"><h3>当前待复习</h3><div class="big">'+metrics.dueCards+'</div><div style="color:var(--muted);font-size:12px">张卡片到期</div></div><div class="stats-box"><h3>完成学习轮次</h3><div class="big">'+metrics.completedRounds+'</div><div style="color:var(--muted);font-size:12px">轮已记录</div></div></div>'+
     '<div class="section-row" style="margin-top:35px"><h2>最近 7 天</h2><span style="color:var(--muted);font-size:12px">共 '+metrics.weekReviews+' 次复习 · 连续 '+metrics.streak+' 天</span></div><div class="stats-box"><div class="bar-chart">'+bars+'</div></div>'+
+    '<div class="section-row" style="margin-top:35px"><h2>薄弱卡片</h2><span style="color:var(--muted);font-size:12px">有过拼错或“不记得”反馈</span></div>'+(weak.length ? '<div class="weak-card-list">'+weak.map(function(entry){return '<div class="weak-card-row"><div><strong>'+escapeHtml(entry.unit.prompt)+'</strong><span>'+escapeHtml(entry.unit.itemTitle)+' · 错误 '+(entry.schedule.lapses || 0)+' 次</span></div><button class="quiet-btn" data-start="'+escapeHtml(entry.unit.itemId)+'">单独复习</button></div>';}).join("")+'</div>' : '<div class="empty">暂时没有薄弱卡片，继续保持。</div>')+
     '<div class="section-row" style="margin-top:35px"><h2>轮次历史</h2><span style="color:var(--muted);font-size:12px">最近 '+Math.min(10,state.rounds.length)+' 轮</span></div>'+ (state.rounds.length ? '<div class="round-history-list">'+state.rounds.slice(0,10).map(function(round){return '<div class="round-history-row"><strong>'+escapeHtml(round.sourceTitle)+'</strong><span>'+round.cardCount+' 个单元 · '+(round.spellingCompleted?"完成拼写":"跳过拼写")+' · 拼写错 '+(round.spellingWrong || 0)+' 次 · '+new Date(round.completedAt).toLocaleString()+'</span></div>';}).join("")+'</div>' : '<div class="empty">完成第一轮后，这里会留下你的学习轨迹。</div>');
   bind();
+  const dataTools=document.getElementById("open-data-tools");
+  if (dataTools) dataTools.onclick=openDataTools;
+  const dailyGoal=document.getElementById("daily-goal");
+  if (dailyGoal) dailyGoal.addEventListener("change",function(){state.dailyGoal=Number(dailyGoal.value);persist();renderStats();notify("每日目标已更新");});
 }
 function bind() {
   document.querySelectorAll("[data-view-link]").forEach(function(element){element.addEventListener("click",function(){setView(element.dataset.viewLink);});});

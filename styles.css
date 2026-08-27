@@ -42,6 +42,34 @@ body{font-size:17px;line-height:1.6;letter-spacing:0}
 .round-history-row strong{font-size:15px}
 .round-history-row span{text-align:right}
 @media(max-width:900px){.round-start-panel{grid-template-columns:1fr}.round-progress{width:260px}}
+.resume-strip{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:0 0 18px;padding:20px 24px;background:var(--teal-soft);border:1px solid #b3d4cd}
+.resume-strip h2{font-family:var(--serif);font-size:24px;font-weight:400;margin:5px 0 0}
+.resume-strip p{color:var(--muted);font-size:13px;margin:3px 0 0}
+.daily-goal{margin-top:18px;color:var(--muted);font-size:13px}
+.daily-goal>div:first-child{display:flex;justify-content:space-between;gap:14px}
+.daily-goal strong{color:var(--ink);font-size:14px}
+.daily-goal-track{height:5px;background:#ded8ce;margin-top:7px;overflow:hidden}
+.daily-goal-track i{display:block;height:100%;background:var(--teal);transition:width .25s ease}
+.round-head-actions{display:grid;gap:10px;justify-items:end}
+.round-head-buttons{display:flex;align-items:center;gap:12px}
+.text-btn{border:0;background:transparent;color:var(--coral-dark);padding:4px 0;font-size:13px}
+.text-btn:hover{text-decoration:underline}
+.weak-card-list{border:1px solid var(--line);background:var(--paper-2)}
+.weak-card-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 18px;border-top:1px solid var(--line)}
+.weak-card-row:first-child{border-top:0}
+.weak-card-row strong{display:block;font-size:16px}
+.weak-card-row span{display:block;color:var(--muted);font-size:13px;margin-top:3px}
+.data-modal-intro{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 18px}
+.data-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center}
+.data-actions select{border:1px solid var(--line);background:#fffdf9;color:var(--ink);padding:10px 11px}
+.file-button{display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:#fffdf9;color:var(--ink);padding:10px 12px;cursor:pointer;font-size:14px}
+.file-button:hover{border-color:var(--coral)}
+.file-button input{display:none}
+.data-actions button:disabled{opacity:.45;cursor:not-allowed}
+.data-status{margin-top:14px;color:var(--muted);font-size:13px}
+.stats-head-actions{display:flex;align-items:end;gap:12px}
+.stats-head-actions label{display:grid;gap:5px;color:var(--muted);font-size:12px}
+.stats-head-actions select{border:1px solid var(--line);background:var(--paper-2);color:var(--ink);padding:10px 11px}
 .shortcut-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
 .shortcut-groups h3{font-size:13px;color:var(--teal);letter-spacing:.08em;margin:0 0 12px}
 .shortcut-groups p{font-size:14px;line-height:1.7;margin:7px 0;color:var(--muted)}
