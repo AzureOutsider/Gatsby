@@ -42,6 +42,12 @@ body{font-size:17px;line-height:1.6;letter-spacing:0}
 .round-history-row strong{font-size:15px}
 .round-history-row span{text-align:right}
 @media(max-width:900px){.round-start-panel{grid-template-columns:1fr}.round-progress{width:260px}}
+.shortcut-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.shortcut-groups h3{font-size:13px;color:var(--teal);letter-spacing:.08em;margin:0 0 12px}
+.shortcut-groups p{font-size:14px;line-height:1.7;margin:7px 0;color:var(--muted)}
+kbd{display:inline-block;min-width:24px;padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;background:#fffdf9;color:var(--ink);font:600 12px/1.5 var(--sans);text-align:center}
+@media(max-width:900px){.shortcut-groups{grid-template-columns:1fr 1fr}}
+@media(max-width:680px){.shortcut-groups{grid-template-columns:1fr}}
 
 .card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .card-icon{width:31px;height:30px;padding:0;border:1px solid var(--line);background:transparent;color:var(--muted);display:grid;place-items:center;font-size:17px;line-height:1}

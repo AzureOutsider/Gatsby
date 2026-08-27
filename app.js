@@ -336,6 +336,87 @@ function notify(message) {
   root.innerHTML = '<div class="toast">'+escapeHtml(message)+"</div>";
   window.setTimeout(function(){ root.innerHTML=""; }, 2300);
 }
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag=String(target.tagName || "").toUpperCase();
+  return tag==="INPUT" || tag==="TEXTAREA" || tag==="SELECT" || Boolean(target.isContentEditable);
+}
+function openShortcutHelp() {
+  document.getElementById("modal-root").innerHTML='<div class="modal-backdrop"><div class="modal shortcut-modal"><div class="modal-head"><h2>键盘快捷键</h2><button class="close-btn" id="close-shortcuts" aria-label="关闭快捷键说明">×</button></div><div class="shortcut-groups"><div><h3>全局导航</h3><p><kbd>Ctrl</kbd> + <kbd>1</kbd> 今日学习</p><p><kbd>Ctrl</kbd> + <kbd>2</kbd> 内容库</p><p><kbd>Ctrl</kbd> + <kbd>3</kbd> 复习队列</p><p><kbd>Ctrl</kbd> + <kbd>4</kbd> 学习记录</p><p><kbd>Ctrl</kbd> + <kbd>K</kbd> 搜索内容</p></div><div><h3>复习操作</h3><p><kbd>1</kbd> 不记得　<kbd>2</kbd> 记得</p><p><kbd>Enter</kbd> / <kbd>→</kbd> 下一个</p><p><kbd>R</kbd> 再来一次</p><p><kbd>P</kbd> 播放发音</p><p><kbd>Esc</kbd> 暂存并离开</p></div><div><h3>轮次流程</h3><p><kbd>Enter</kbd> 开始轮次</p><p><kbd>S</kbd> 进入拼写　<kbd>N</kbd> 跳过拼写</p><p><kbd>Enter</kbd> 提交拼写 / 继续下一张</p><p><kbd>?</kbd> 查看本说明</p></div></div></div></div>';
+  document.getElementById("close-shortcuts").onclick=closeModal;
+}
+function leavePractice() {
+  if (document.getElementById("modal-root").innerHTML) { closeModal(); return; }
+  if (state.view==="review") {
+    setView("home");
+    notify(state.round || state.session ? "进度已保存" : "已返回首页");
+  } else if (state.view!=="home") {
+    setView("home");
+  }
+}
+function currentPracticeUnit() {
+  if (validRound(state.round)) {
+    if (state.round.stage==="cards") return roundCurrentCard(state.round);
+    if (state.round.stage==="spelling") { ensureSpellingQueue(state.round); return roundCurrentSpellingCard(state.round); }
+  }
+  if (state.session && state.session.unit) return state.session.unit;
+  return null;
+}
+function handleKeyboardShortcuts(event) {
+  const key=event.key;
+  const lower=key.toLowerCase();
+  const typing=isTypingTarget(event.target);
+  if (event.ctrlKey && !event.altKey && !event.shiftKey) {
+    const nav={"1":"home","2":"library","3":"review","4":"stats"};
+    if (nav[key]) { event.preventDefault(); setView(nav[key]); return; }
+    if (lower==="k") {
+      event.preventDefault();
+      setView("library");
+      window.setTimeout(function(){const input=document.getElementById("library-search");if(input) input.focus();},50);
+      return;
+    }
+  }
+  if (key==="Escape") { event.preventDefault(); leavePractice(); return; }
+  if (document.getElementById("modal-root").innerHTML) return;
+  if (typing) return;
+  if (key==="?") { event.preventDefault(); openShortcutHelp(); return; }
+  if (state.view!=="review") return;
+  const round=state.round;
+  if (validRound(round)) {
+    if (round.stage==="cards") {
+      if (round.cardPhase==="prompt" && key==="1") { event.preventDefault(); recordRoundFeedback("forgot"); return; }
+      if (round.cardPhase==="prompt" && key==="2") { event.preventDefault(); recordRoundFeedback("remembered"); return; }
+      if (round.cardPhase==="answer" && (key==="Enter" || key==="ArrowRight")) { event.preventDefault(); advanceRoundCard(); return; }
+      if (round.cardPhase==="answer" && lower==="r" && round.cardFeedback!=="forgot") { event.preventDefault(); repeatRoundCard(); return; }
+      if (lower==="p") { event.preventDefault(); const unit=roundCurrentCard(round); if(unit) playWord(unit.prompt); return; }
+    } else if (round.stage==="gate") {
+      if (lower==="s") { event.preventDefault(); enterRoundSpelling(); return; }
+      if (lower==="n") { event.preventDefault(); completeRound("skip"); return; }
+      if (key==="Enter") { event.preventDefault(); enterRoundSpelling(); return; }
+    } else if (round.stage==="spelling") {
+      const unit=currentPracticeUnit();
+      if (lower==="p" && unit) { event.preventDefault(); playWord(unit.prompt); return; }
+      if (round.spellingPhase==="answer" && (key==="Enter" || key==="ArrowRight")) { event.preventDefault(); advanceRoundSpelling(); return; }
+    }
+    return;
+  }
+  const session=state.session;
+  const current=session && session.unit ? session.unit : null;
+  if (!current) {
+    if (key==="Enter") { event.preventDefault(); startRound(state.roundStartItemId || "all",state.roundSize); }
+    return;
+  }
+  if (state.practiceMode==="cards") {
+    if (session.phase==="prompt" && key==="1") { event.preventDefault(); recordFeedback("forgot",current); return; }
+    if (session.phase==="prompt" && key==="2") { event.preventDefault(); recordFeedback("remembered",current); return; }
+    if (session.phase==="answer" && (key==="Enter" || key==="ArrowRight")) { event.preventDefault(); advanceReview(); return; }
+    if (session.phase==="answer" && lower==="r" && session.feedback!=="forgot") { event.preventDefault(); repeatReview(); return; }
+  } else if (session.phase==="answer" && (key==="Enter" || key==="ArrowRight")) {
+    event.preventDefault(); advanceReview(); return;
+  }
+  if (session.phase==="answer" && lower==="r" && session.feedback!=="forgot") { event.preventDefault(); repeatReview(); return; }
+  if (lower==="p") { event.preventDefault(); playWord(current.prompt); }
+}
 function speak(text) {
   if (!("speechSynthesis" in window)) { notify("当前浏览器不支持语音播放"); return; }
   window.speechSynthesis.cancel();
@@ -965,4 +1046,5 @@ function importContent() {
 }
 document.getElementById("quick-search").addEventListener("click",function(){setView("library");window.setTimeout(function(){const input=document.getElementById("library-search");if(input) input.focus();},50);});
 document.querySelectorAll("[data-view]").forEach(function(element){element.addEventListener("click",function(){setView(element.dataset.view);});});
+document.addEventListener("keydown",handleKeyboardShortcuts);
 render();
