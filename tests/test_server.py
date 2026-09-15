@@ -15,7 +15,7 @@ spec.loader.exec_module(server_module)
 class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = server_module.ThreadingHTTPServer(("127.0.0.1", 0), server_module.AppHandler)
+        cls.server = server_module.LocalHTTPServer(("127.0.0.1", 0), server_module.AppHandler)
         cls.url = f"http://127.0.0.1:{cls.server.server_address[1]}"
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -39,6 +39,15 @@ class ServerTests(unittest.TestCase):
             health = json.load(response)
             self.assertEqual(health["app"], "Gatsby")
             self.assertEqual(health["build"], server_module.build_id())
+
+    def test_another_server_cannot_take_the_same_port(self):
+        duplicate = None
+        try:
+            with self.assertRaises(OSError):
+                duplicate = server_module.ThreadingHTTPServer(self.server.server_address, server_module.AppHandler)
+        finally:
+            if duplicate:
+                duplicate.server_close()
 
     def test_does_not_expose_project_or_directory_listing(self):
         for path in ["/server.py", "/package.json", "/assets/", "/../server.py", "/.git/config"]:

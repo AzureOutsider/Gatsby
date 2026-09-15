@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import socket
 import sys
 import threading
 import webbrowser
@@ -15,6 +16,17 @@ BASE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "web-di
 
 def build_id():
     return hashlib.sha256((BASE / "index.html").read_bytes()).hexdigest()[:16]
+
+
+class LocalHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+
+    def server_bind(self):
+        # Windows SO_REUSEADDR permits competing listeners. Exclusivity makes
+        # duplicate launches reliably discover/reuse the existing application.
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 class AppHandler(SimpleHTTPRequestHandler):
@@ -58,7 +70,7 @@ def main():
         return 1
     url = f"http://127.0.0.1:{args.port}"
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), AppHandler)
+        server = LocalHTTPServer(("127.0.0.1", args.port), AppHandler)
     except OSError:
         try:
             with urlopen(url + "/__gatsby_health", timeout=1) as response:
