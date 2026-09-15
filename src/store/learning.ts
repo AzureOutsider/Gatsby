@@ -1,4 +1,9 @@
 import seed from "../data/seed.json";
+import {
+  DataValidationError,
+  diagnoseData,
+  type DataDiagnostic,
+} from "./diagnostics";
 import type {
   Backup,
   Book,
@@ -118,63 +123,85 @@ function normalizeRound(round: Round | null): Round | null {
   };
 }
 export function validateBackup(value: unknown): asserts value is Backup {
-  if (!object(value) || Number(value.version || 1) > 1)
-    throw new Error("备份版本不支持，请使用兼容的学习数据备份。");
-  if (
-    !Array.isArray(value.items) ||
-    !value.items.every(
-      (item) =>
-        object(item) &&
-        typeof item.id === "string" &&
-        typeof item.title === "string" &&
-        typeof item.type === "string" &&
-        typeof item.author === "string" &&
-        typeof item.description === "string" &&
-        Array.isArray(item.units) &&
-        item.units.every(validUnit),
-    )
-  )
-    throw new Error("备份中的内容库格式不完整。");
-  if (
-    !Array.isArray(value.logs) ||
-    !value.logs.every(
-      (log) =>
-        object(log) &&
-        typeof log.itemId === "string" &&
-        typeof log.prompt === "string" &&
-        ["again", "know", "hard"].includes(String(log.rating)) &&
-        typeof log.at === "string",
-    )
-  )
-    throw new Error("备份中的学习记录无效。");
-  if (
-    !object(value.schedule) ||
-    !Object.values(value.schedule).every(
-      (entry) =>
-        object(entry) &&
-        ["dueAt", "interval", "ease", "reviews", "lapses"].every(
-          (key) =>
-            typeof entry[key] === "number" &&
-            Number.isFinite(entry[key]) &&
-            Number(entry[key]) >= 0,
-        ),
-    )
-  )
-    throw new Error("备份中的复习计划无效。");
-  if (
-    !Array.isArray(value.rounds) ||
-    !value.rounds.every(
-      (round) =>
-        object(round) &&
-        typeof round.id === "string" &&
-        typeof round.sourceTitle === "string" &&
-        typeof round.completedAt === "string" &&
-        typeof round.cardCount === "number",
-    )
-  )
-    throw new Error("备份中的轮次记录无效。");
-  if (value.round != null && !validRound(value.round))
-    throw new Error("备份中的当前轮次不完整，未导入任何数据。");
+  function requireField(
+    ok: unknown,
+    field: string,
+    message: string,
+  ): asserts ok {
+    if (!ok) throw new DataValidationError(field, message);
+  }
+  requireField(object(value), "state", "应为对象");
+  if (value.version !== undefined && value.version !== 1)
+    throw new DataValidationError(
+      "version",
+      "不支持此版本",
+      "UNSUPPORTED_VERSION",
+    );
+  requireField(Array.isArray(value.items), "items", "应为数组");
+  value.items.forEach((item, index) => {
+    const path = `items[${index}]`;
+    requireField(object(item), path, "应为对象");
+    for (const key of ["id", "title", "type", "author", "description"])
+      requireField(typeof item[key] === "string", `${path}.${key}`, "应为文字");
+    requireField(Array.isArray(item.units), `${path}.units`, "应为数组");
+    item.units.forEach((unit, unitIndex) => {
+      const unitPath = `${path}.units[${unitIndex}]`;
+      requireField(object(unit), unitPath, "应为对象");
+      for (const key of ["prompt", "answer", "context", "note", "kind"])
+        requireField(
+          typeof unit[key] === "string",
+          `${unitPath}.${key}`,
+          "应为文字",
+        );
+      requireField(unit.prompt, `${unitPath}.prompt`, "不能为空");
+    });
+  });
+  requireField(Array.isArray(value.logs), "logs", "应为数组");
+  value.logs.forEach((log, index) => {
+    const path = `logs[${index}]`;
+    requireField(object(log), path, "应为对象");
+    for (const key of ["itemId", "prompt", "at"])
+      requireField(typeof log[key] === "string", `${path}.${key}`, "应为文字");
+    requireField(
+      ["again", "know", "hard"].includes(String(log.rating)),
+      `${path}.rating`,
+      "复习反馈类型不支持",
+    );
+  });
+  requireField(object(value.schedule), "schedule", "应为对象");
+  Object.values(value.schedule).forEach((entry, index) => {
+    const path = `schedule[${index}]`;
+    requireField(object(entry), path, "应为对象");
+    for (const key of ["dueAt", "interval", "ease", "reviews", "lapses"])
+      requireField(
+        typeof entry[key] === "number" &&
+          Number.isFinite(entry[key]) &&
+          Number(entry[key]) >= 0,
+        `${path}.${key}`,
+        "应为非负有限数值",
+      );
+  });
+  requireField(Array.isArray(value.rounds), "rounds", "应为数组");
+  value.rounds.forEach((round, index) => {
+    const path = `rounds[${index}]`;
+    requireField(object(round), path, "应为对象");
+    for (const key of ["id", "sourceTitle", "completedAt"])
+      requireField(
+        typeof round[key] === "string",
+        `${path}.${key}`,
+        "应为文字",
+      );
+    requireField(
+      typeof round.cardCount === "number",
+      `${path}.cardCount`,
+      "应为数值",
+    );
+  });
+  requireField(
+    value.round == null || validRound(value.round),
+    "round",
+    "轮次卡片、阶段或队列位置无效",
+  );
 }
 function normalizeData(data: LearningData): LearningData {
   return {
@@ -195,7 +222,11 @@ export function loadData(storage: StoragePort): {
   data: LearningData;
   warning: string;
   notice?: string;
+  diagnostic?: DataDiagnostic;
 } {
+  let source = "Gatsby 数据",
+    storageKey = STATE_KEY,
+    field = "state";
   try {
     const current = storage.getItem(STATE_KEY);
     if (current) {
@@ -203,20 +234,22 @@ export function loadData(storage: StoragePort): {
       validateBackup(value);
       return { data: normalizeData(value), warning: "" };
     }
-    const raw = Object.fromEntries(
-      Object.entries(legacyKeys).map(([name, key]) => [
-        name,
-        storage.getItem(key),
-      ]),
-    );
+    source = "旧版 English Study 数据";
+    const raw: Record<string, string | null> = {};
+    for (const [name, key] of Object.entries(legacyKeys)) {
+      storageKey = key;
+      field = name;
+      raw[name] = storage.getItem(key);
+    }
     const hasLegacy = Object.values(raw).some((value) => value !== null);
     let notice = "";
-    if (hasLegacy && !storage.getItem(MIGRATION_KEY)) {
+    if (hasLegacy) {
       try {
-        storage.setItem(
-          MIGRATION_KEY,
-          JSON.stringify({ savedAt: new Date().toISOString(), raw }),
-        );
+        if (!storage.getItem(MIGRATION_KEY))
+          storage.setItem(
+            MIGRATION_KEY,
+            JSON.stringify({ savedAt: new Date().toISOString(), raw }),
+          );
       } catch {
         notice =
           "原有学习数据已读取，但空间不足，未能创建升级快照。请先导出 JSON 备份；旧数据未改动。";
@@ -224,6 +257,8 @@ export function loadData(storage: StoragePort): {
     }
     const data = initialData();
     for (const name of Object.keys(legacyKeys) as (keyof LearningData)[]) {
+      storageKey = legacyKeys[name];
+      field = name;
       if (raw[name] !== null)
         Object.assign(data, {
           [name]: name === "practiceMode" ? raw[name] : JSON.parse(raw[name]!),
@@ -236,11 +271,18 @@ export function loadData(storage: StoragePort): {
     };
     validateBackup(payload);
     return { data: normalizeData(data), warning: "", notice };
-  } catch {
+  } catch (error) {
+    if (error instanceof DataValidationError) {
+      field = error.field;
+      const group = field.split(/[.[]/)[0] as keyof LearningData;
+      if (source === "旧版 English Study 数据")
+        storageKey = legacyKeys[group] || storageKey;
+    }
+    const diagnostic = diagnoseData(error, source, storageKey, field);
     return {
       data: initialData(),
-      warning:
-        "本地数据读取失败。原始数据未覆盖；请先导出已有备份或恢复数据，再继续学习。",
+      warning: `${source} · ${diagnostic.message} 原始数据未覆盖。`,
+      diagnostic,
     };
   }
 }
@@ -250,6 +292,22 @@ export function backup(data: LearningData): Backup {
 export function saveData(storage: StoragePort, data: LearningData) {
   // One authoritative atomic write; legacy keys remain intact for rollback.
   storage.setItem(STATE_KEY, JSON.stringify(backup(data)));
+}
+export function resetLearningData(
+  storage: StoragePort & Pick<Storage, "removeItem">,
+) {
+  const data = initialData();
+  // Commit fresh state before cleanup. If this write fails, no old key is removed.
+  saveData(storage, data);
+  const remainingKeys: string[] = [];
+  for (const key of [...Object.values(legacyKeys), MIGRATION_KEY]) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      remainingKeys.push(key);
+    }
+  }
+  return { data, remainingKeys };
 }
 export function importBackup(
   data: LearningData,

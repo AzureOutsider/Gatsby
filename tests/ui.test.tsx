@@ -17,6 +17,8 @@ import {
   advanceCard,
   initialData,
   STATE_KEY,
+  legacyKeys,
+  MIGRATION_KEY,
 } from "../src/store/learning";
 
 vi.mock("../src/features/flashcards/audio", () => ({
@@ -109,4 +111,67 @@ it("does not show success or advance the learning state when persistence fails",
   fireEvent.click(screen.getByRole("button", { name: "开始这一轮 Enter" }));
   expect(document.querySelector(".study-card")).toBeNull();
   expect(screen.getByRole("status").textContent).toContain("保存失败");
+});
+
+it("shows specific diagnostic information and can reset corrupt testing data", () => {
+  localStorage.setItem(legacyKeys.round, "{secret-broken");
+  localStorage.setItem("another-app", "preserve");
+  mount();
+  expect(screen.getByRole("alert").textContent).toContain("当前轮次");
+  fireEvent.click(screen.getByRole("button", { name: "查看诊断与处理" }));
+  expect(screen.getByText("INVALID_JSON")).toBeTruthy();
+  expect(screen.getByText(legacyKeys.round)).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "清除旧测试数据，重新开始" }),
+  );
+  expect(window.confirm).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(localStorage.getItem(legacyKeys.round)).toBeNull();
+  expect(localStorage.getItem(MIGRATION_KEY)).toBeNull();
+  expect(localStorage.getItem("another-app")).toBe("preserve");
+  fireEvent.click(screen.getByRole("button", { name: "开始今天的学习" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始这一轮 Enter" }));
+  expect(document.querySelector(".study-card")).not.toBeNull();
+});
+it("cancelling reset leaves test data intact", () => {
+  localStorage.setItem(legacyKeys.round, "{broken");
+  vi.mocked(window.confirm).mockReturnValue(false);
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "查看诊断与处理" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "清除旧测试数据，重新开始" }),
+  );
+  expect(localStorage.getItem(legacyKeys.round)).toBe("{broken");
+  expect(localStorage.getItem(STATE_KEY)).toBeNull();
+});
+it("handles access denied on the localStorage getter without crashing", () => {
+  vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+    throw new DOMException("private", "SecurityError");
+  });
+  mount();
+  expect(screen.getByRole("alert").textContent).toContain("浏览器禁止");
+  fireEvent.click(screen.getByRole("button", { name: "查看诊断与处理" }));
+  expect(screen.getByText("STORAGE_ACCESS_DENIED")).toBeTruthy();
+});
+
+it("keeps the last valid in-memory data exportable after a failed reread", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "开始今天的学习" }));
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("", "QuotaExceededError");
+  });
+  fireEvent.click(screen.getByRole("button", { name: "开始这一轮 Enter" }));
+  fireEvent.click(screen.getByRole("button", { name: "备份我的学习" }));
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new DOMException("", "SecurityError");
+  });
+  fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "导出 JSON 备份",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
 });

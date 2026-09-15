@@ -213,7 +213,7 @@ export default function App() {
           <div className="storage-warning" role="alert">
             <p>{storageWarning}</p>
             <button className="quiet-btn" onClick={() => setModal("data")}>
-              恢复备份
+              查看诊断与处理
             </button>
           </div>
         )}

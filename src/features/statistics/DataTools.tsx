@@ -9,7 +9,16 @@ import {
   validateBackup,
 } from "../../store/learning";
 export function DataTools({ onClose }: { onClose: () => void }) {
-  const { data, update, notify, storageWarning } = useLearning();
+  const {
+    data,
+    update,
+    notify,
+    storageWarning,
+    diagnostic,
+    retryLoad,
+    resetData,
+    canExport,
+  } = useLearning();
   const [payload, setPayload] = useState<unknown>(null),
     [name, setName] = useState(""),
     [error, setError] = useState(""),
@@ -26,6 +35,33 @@ export function DataTools({ onClose }: { onClose: () => void }) {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify("学习数据已导出");
+  }
+  function exportDiagnostic() {
+    const report = {
+      app: "Gatsby",
+      reportVersion: 1,
+      origin: window.location.origin,
+      diagnostic,
+      note: "仅包含错误位置及分类，不包含词条原文、学习记录或完整备份。",
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gatsby-diagnostic-${dayKey(new Date())}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify("诊断报告已导出，不包含学习内容。");
+  }
+  function reset() {
+    if (
+      !confirm(
+        "确定清除学习测试数据并重新开始？\n将删除此浏览器当前地址下 Gatsby / English Study 的自定义内容、复习记录、轮次进度、设置及旧版快照，恢复5份内置词书（含 Viva La Vida）。\n不会清理其他网站的数据。没有外部备份时无法恢复这些测试数据。",
+      )
+    )
+      return;
+    if (resetData()) onClose();
   }
   async function choose(file?: File) {
     setPayload(null);
@@ -71,17 +107,80 @@ export function DataTools({ onClose }: { onClose: () => void }) {
         备份包含内容库、复习调度、学习记录与未完成轮次。兼容旧版 English Study
         的 JSON 备份。
       </p>
+      {diagnostic && (
+        <section
+          className="data-section diagnostic-panel"
+          aria-label="数据诊断"
+        >
+          <h3>
+            {diagnostic.operation === "read"
+              ? "读取失败的具体原因"
+              : diagnostic.operation === "reset"
+                ? "重置未完成"
+                : "保存未完成"}
+          </h3>
+          <p className="form-error" role="alert">
+            {diagnostic.message}
+          </p>
+          <dl>
+            <dt>错误代码</dt>
+            <dd>{diagnostic.code}</dd>
+            <dt>来源</dt>
+            <dd>
+              {diagnostic.source} · {diagnostic.section}
+            </dd>
+            <dt>存储位置</dt>
+            <dd>{diagnostic.storageKey}</dd>
+            <dt>字段位置</dt>
+            <dd>{diagnostic.field}</dd>
+          </dl>
+          <p className="form-help">{diagnostic.suggestion}</p>
+          <div className="diagnostic-actions">
+            <button className="quiet-btn" onClick={retryLoad}>
+              重新读取
+            </button>
+            <button className="quiet-btn" onClick={exportDiagnostic}>
+              导出诊断报告
+            </button>
+          </div>
+          <p className="form-help">
+            诊断报告不含学习内容，可发送给开发者排查。它不是学习数据备份。
+          </p>
+        </section>
+      )}
+      <section className="data-section reset-section">
+        <h3>不保留测试数据，重新开始</h3>
+        <p className="modal-copy">
+          清空自定义内容、学习记录、轮次进度及旧版快照，恢复内置词书。只作用于当前浏览器、当前地址的学习数据。
+        </p>
+        <button className="quiet-btn danger" onClick={reset}>
+          清除旧测试数据，重新开始
+        </button>
+        <p className="form-help">
+          此操作需要确认；没有外部备份时无法恢复。不会影响其他网站。
+        </p>
+      </section>
       <div className="data-section">
         <h3>保存一份副本</h3>
         <button
           className="primary-btn"
           onClick={exportData}
-          disabled={!!storageWarning}
+          disabled={!canExport}
         >
           <Download size={18} aria-hidden="true" />
           导出 JSON 备份
         </button>
+        {!canExport && (
+          <p className="form-help">
+            当前原始数据尚未成功读取，不能将页面的默认词书导出为原数据备份。可先查看诊断，或清除测试数据重新开始。
+          </p>
+        )}
       </div>
+      {storageWarning && canExport && (
+        <p className="form-help">
+          当前存储读取失败，但仍可导出本页面最后一次成功读取的数据。它可能不包含其他窗口的新修改。
+        </p>
+      )}
       <div className="data-section">
         <h3>从备份继续</h3>
         <label className="file-field">

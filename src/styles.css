@@ -1513,6 +1513,30 @@ button kbd {
   margin: 22px 0;
 }
 /* Compact desktop windows; no mobile navigation or mobile-only flows. */
+.diagnostic-panel dl {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.diagnostic-panel dt {
+  color: var(--muted);
+}
+.diagnostic-panel dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ivory);
+}
+.diagnostic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.reset-section .danger {
+  border-color: var(--rose);
+  color: #edb5c2;
+}
 @media (max-width: 1200px) {
   .header-inner {
     padding: 15px 25px;
