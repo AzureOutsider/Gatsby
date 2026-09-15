@@ -225,6 +225,43 @@ describe("migration and persistence", () => {
     expect(() => validateBackup(payload)).toThrow();
   });
 });
+describe("review regressions", () => {
+  it("retains readable legacy data when the optional snapshot exceeds quota", () => {
+    const existing = feedback(roundData(), "forgot");
+    const storage = memory();
+    for (const [name, key] of Object.entries(legacyKeys)) {
+      const value = existing[name as keyof typeof existing];
+      storage.setItem(
+        key,
+        name === "practiceMode" ? String(value) : JSON.stringify(value),
+      );
+    }
+    const loaded = loadData({
+      getItem: storage.getItem,
+      setItem() {
+        throw new Error("QuotaExceededError");
+      },
+    });
+    expect(loaded.warning).toBe("");
+    expect(loaded.data.round).toEqual(existing.round);
+    expect(backup(loaded.data).logs).toHaveLength(1);
+  });
+  it("does not remove real words that resemble column headers during editing", () => {
+    const raw =
+      "word | 单词 | A word. | note\nterm | 学期 | A term. | note\nEnglish | 英语 | Learn English. | note";
+    expect(parseUnits(raw, "单词书", true).map((unit) => unit.prompt)).toEqual([
+      "word",
+      "term",
+      "English",
+    ]);
+    expect(
+      parseUnits("word,meaning,example\nword,单词,A word.", "单词书").map(
+        (unit) => unit.prompt,
+      ),
+    ).toEqual(["word"]);
+  });
+});
+
 describe("content and statistics", () => {
   it("removes schedules for deleted units and invalidates affected rounds", () => {
     const data = feedback(roundData(), "remembered"),

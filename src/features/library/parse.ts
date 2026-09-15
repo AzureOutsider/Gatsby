@@ -55,13 +55,7 @@ export function parseUnits(raw: string, type: string, edit = false): Unit[] {
         });
       continue;
     }
-    if (
-      !edit &&
-      (/^[#>]/.test(line) ||
-        /^[-|:\s]+$/.test(line) ||
-        /^(word|term|english)\s*[,|]/i.test(line))
-    )
-      continue;
+    if (!edit && (/^[#>]/.test(line) || /^[-|:\s]+$/.test(line))) continue;
     line = line.replace(/^[-*]\s+|^\d+[.)]\s+/, "");
     const fields = line.includes("|")
       ? line
@@ -72,10 +66,11 @@ export function parseUnits(raw: string, type: string, edit = false): Unit[] {
         ? csvFields(line)
         : line.split(/[：:]/).map((x) => x.trim());
     const [prompt, answer, context, ...notes] = fields;
+    if (!prompt || prompt.length > 500) continue;
     if (
-      !prompt ||
-      /^(英文|单词|word|term|english)$/i.test(prompt) ||
-      prompt.length > 500
+      !edit &&
+      /^(英文|单词|word|term|english)$/i.test(prompt) &&
+      /^(meaning|definition|释义|中文|中文释义|翻译)$/i.test(answer || "")
     )
       continue;
     result.push({

@@ -19,6 +19,7 @@ interface Store {
   message: string;
   notify: (message: string) => void;
   storageWarning: string;
+  sessionRevision: number;
 }
 const Context = createContext<Store | null>(null);
 export function LearningProvider({ children }: { children: ReactNode }) {
@@ -26,7 +27,8 @@ export function LearningProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState(loaded.data);
   const current = useRef(data);
   const [view, setView] = useState<View>("home");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(loaded.notice || "");
+  const [sessionRevision, setSessionRevision] = useState(0);
   const [storageWarning, setStorageWarning] = useState(loaded.warning);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function notify(text: string) {
@@ -54,12 +56,24 @@ export function LearningProvider({ children }: { children: ReactNode }) {
     }
     current.current = next;
     setData(next);
-    if (recovery) setStorageWarning("");
+    if (recovery) {
+      setStorageWarning("");
+      setSessionRevision((value) => value + 1);
+    }
     return true;
   }
   return (
     <Context.Provider
-      value={{ data, view, setView, update, message, notify, storageWarning }}
+      value={{
+        data,
+        view,
+        setView,
+        update,
+        message,
+        notify,
+        storageWarning,
+        sessionRevision,
+      }}
     >
       {children}
     </Context.Provider>

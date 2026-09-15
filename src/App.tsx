@@ -27,7 +27,8 @@ const navigation = [
   { id: "stats", label: "学习记录", icon: ChartNoAxesCombined },
 ] as const;
 export default function App() {
-  const { data, view, setView, message, storageWarning } = useLearning();
+  const { data, view, setView, message, storageWarning, sessionRevision } =
+    useLearning();
   const [source, setSource] = useState("all"),
     [modal, setModal] = useState<"shortcuts" | "data" | "logo" | null>(null);
   const due = statistics(data).due;
@@ -107,7 +108,7 @@ export default function App() {
         );
       else if (key === "enter")
         button = document.querySelector<HTMLButtonElement>(
-          '[data-action="next"], [data-action="start"]',
+          '[data-action="next"], [data-action="start"], [data-action="spelling"]',
         );
       else if (action[key])
         button = document.querySelector<HTMLButtonElement>(
@@ -218,7 +219,9 @@ export default function App() {
         )}
         {view === "home" && <HomePage onStart={start} />}
         {view === "library" && <LibraryPage onStart={start} />}
-        {view === "review" && <ReviewPage source={source} />}
+        {view === "review" && (
+          <ReviewPage key={sessionRevision} source={source} />
+        )}
         {view === "stats" && (
           <StatisticsPage onData={() => setModal("data")} onStart={start} />
         )}

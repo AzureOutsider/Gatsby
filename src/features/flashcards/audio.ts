@@ -72,8 +72,10 @@ export function playWord(text: string, notify: (message: string) => void) {
     currentAudio = audio;
     audio.currentTime = 0;
     let started = false;
+    let fellBack = false;
     const fallback = () => {
-      if (token === generation && !started) {
+      if (token === generation && !started && !fellBack) {
+        fellBack = true;
         clearTimeout(timeout);
         audio.pause();
         speak(text, notify, token);

@@ -194,6 +194,7 @@ function normalizeData(data: LearningData): LearningData {
 export function loadData(storage: StoragePort): {
   data: LearningData;
   warning: string;
+  notice?: string;
 } {
   try {
     const current = storage.getItem(STATE_KEY);
@@ -209,11 +210,18 @@ export function loadData(storage: StoragePort): {
       ]),
     );
     const hasLegacy = Object.values(raw).some((value) => value !== null);
-    if (hasLegacy && !storage.getItem(MIGRATION_KEY))
-      storage.setItem(
-        MIGRATION_KEY,
-        JSON.stringify({ savedAt: new Date().toISOString(), raw }),
-      );
+    let notice = "";
+    if (hasLegacy && !storage.getItem(MIGRATION_KEY)) {
+      try {
+        storage.setItem(
+          MIGRATION_KEY,
+          JSON.stringify({ savedAt: new Date().toISOString(), raw }),
+        );
+      } catch {
+        notice =
+          "原有学习数据已读取，但空间不足，未能创建升级快照。请先导出 JSON 备份；旧数据未改动。";
+      }
+    }
     const data = initialData();
     for (const name of Object.keys(legacyKeys) as (keyof LearningData)[]) {
       if (raw[name] !== null)
@@ -227,7 +235,7 @@ export function loadData(storage: StoragePort): {
       exportedAt: new Date().toISOString(),
     };
     validateBackup(payload);
-    return { data: normalizeData(data), warning: "" };
+    return { data: normalizeData(data), warning: "", notice };
   } catch {
     return {
       data: initialData(),

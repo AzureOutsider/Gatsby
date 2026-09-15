@@ -220,7 +220,7 @@ export function ReviewPage({ source }: { source: string }) {
                 : "本轮翻卡"}
         </span>
         <strong>
-          {gate ? round.cards.length : index + 1} / {queue.length}
+          {gate ? queue.length : index + 1} / {queue.length}
         </strong>
       </div>
       <Progress
