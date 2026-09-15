@@ -1,0 +1,151 @@
+[
+  {
+    "id": "reading",
+    "title": "Reading Practice",
+    "type": "文章",
+    "author": "Gatsby · 原创示例",
+    "level": "入门",
+    "progress": 0,
+    "description": "用原创短句练习阅读，在语境中理解表达。",
+    "units": [
+      {
+        "kind": "词汇",
+        "prompt": "notice",
+        "answer": "注意到",
+        "context": "I noticed a small library near the station.",
+        "note": "notice 后可直接接名词。"
+      },
+      {
+        "kind": "词汇",
+        "prompt": "quiet",
+        "answer": "安静的",
+        "context": "The reading room is quiet in the morning.",
+        "note": ""
+      },
+      {
+        "kind": "词汇",
+        "prompt": "chapter",
+        "answer": "章节",
+        "context": "We read one chapter before breakfast.",
+        "note": ""
+      },
+      {
+        "kind": "词汇",
+        "prompt": "curious",
+        "answer": "好奇的",
+        "context": "The new student is curious about every story.",
+        "note": "be curious about = 对……好奇。"
+      }
+    ]
+  },
+  {
+    "id": "conversation",
+    "title": "Everyday Conversation",
+    "type": "影视台词",
+    "author": "Gatsby · 原创示例",
+    "level": "入门",
+    "progress": 0,
+    "description": "原创日常对话示例，不摘录影视字幕。",
+    "units": [
+      {
+        "kind": "句子",
+        "prompt": "Could you repeat that?",
+        "answer": "你能再说一遍吗？",
+        "context": "Could you repeat that? I missed the street name.",
+        "note": "Could you ...? 是礼貌请求。"
+      },
+      {
+        "kind": "句子",
+        "prompt": "That sounds good.",
+        "answer": "听起来不错。",
+        "context": "A walk after lunch? That sounds good.",
+        "note": "sound + 形容词表示听起来如何。"
+      },
+      {
+        "kind": "句子",
+        "prompt": "Let me check.",
+        "answer": "让我确认一下。",
+        "context": "Let me check the timetable before we leave.",
+        "note": "let + 宾语 + 动词原形。"
+      }
+    ]
+  },
+  {
+    "id": "core",
+    "title": "Core Vocabulary",
+    "type": "单词书",
+    "author": "Gatsby · 原创示例",
+    "level": "入门",
+    "progress": 0,
+    "description": "常用单词与原创例句，适合尝试翻卡和拼写。",
+    "units": [
+      {
+        "kind": "词汇",
+        "prompt": "accurate",
+        "answer": "准确的",
+        "context": "An accurate map helps us find the new library.",
+        "note": ""
+      },
+      {
+        "kind": "词汇",
+        "prompt": "context",
+        "answer": "上下文；语境",
+        "context": "Read the whole paragraph to understand the context.",
+        "note": ""
+      },
+      {
+        "kind": "词汇",
+        "prompt": "hesitate",
+        "answer": "犹豫；迟疑",
+        "context": "Please do not hesitate to ask a question.",
+        "note": "hesitate to do = 犹豫做某事。"
+      },
+      {
+        "kind": "词汇",
+        "prompt": "retain",
+        "answer": "保留；记住",
+        "context": "Short reviews help me retain useful expressions.",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "id": "phrases",
+    "title": "Phrases in Practice",
+    "type": "单词书",
+    "author": "Gatsby · 原创示例",
+    "level": "入门",
+    "progress": 0,
+    "description": "从原创生活场景中练习固定搭配。",
+    "units": [
+      {
+        "kind": "短语",
+        "prompt": "look forward to",
+        "answer": "期待",
+        "context": "I look forward to visiting your new studio.",
+        "note": "to 是介词，后接名词或动名词。"
+      },
+      {
+        "kind": "短语",
+        "prompt": "take a break",
+        "answer": "休息一下",
+        "context": "Let us take a break after this exercise.",
+        "note": ""
+      },
+      {
+        "kind": "短语",
+        "prompt": "make progress",
+        "answer": "取得进步",
+        "context": "Regular practice helps us make progress.",
+        "note": "progress 在此为不可数名词。"
+      },
+      {
+        "kind": "短语",
+        "prompt": "keep in mind",
+        "answer": "记住；牢记",
+        "context": "Keep the opening hours in mind when planning your visit.",
+        "note": ""
+      }
+    ]
+  }
+]
