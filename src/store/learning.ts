@@ -22,6 +22,20 @@ export const SEED_MIGRATION_KEY = "gatsby-seed-the-line-v1";
 export const SHOTS_SEED_MIGRATION_KEY = "gatsby-seed-shots-v1";
 export const DEMONS_SEED_MIGRATION_KEY = "gatsby-seed-demons-v1";
 export const ENEMY_SEED_MIGRATION_KEY = "gatsby-seed-enemy-v1";
+export const SEED_CATALOG_MIGRATION_KEY = "gatsby-seed-catalog-v1";
+// Books present before automatic catalog synchronization was introduced.
+// New books added to seed.json after this baseline are migrated automatically.
+const SEED_CATALOG_BASELINE_IDS = new Set([
+  "duvet",
+  "paradise",
+  "core",
+  "office",
+  "viva-la-vida",
+  "the-line",
+  "shots",
+  "demons",
+  "enemy",
+]);
 export const legacyKeys = {
   items: "english-study-library-v1",
   logs: "english-study-logs-v1",
@@ -243,8 +257,66 @@ function migrateSeedBook(
   }
   return next;
 }
+function migrateSeedCatalog(storage: StoragePort, data: LearningData) {
+  const currentIds = (seed as Book[]).map((book) => book.id);
+  const snapshot = storage.getItem(SEED_CATALOG_MIGRATION_KEY);
+  if (!snapshot) {
+    const introduced = (seed as Book[]).filter(
+      (book) => !SEED_CATALOG_BASELINE_IDS.has(book.id),
+    );
+    let next = data;
+    if (data.items.length && introduced.length) {
+      const missing = introduced.filter(
+        (book) => !data.items.some((item) => item.id === book.id),
+      );
+      if (missing.length) {
+        next = {
+          ...data,
+          items: [...data.items, ...missing.map((book) => clone(book))],
+        };
+        saveData(storage, next);
+      }
+    }
+    try {
+      storage.setItem(SEED_CATALOG_MIGRATION_KEY, JSON.stringify(currentIds));
+    } catch {
+      // Catalog markers are optional; readable learning data takes priority.
+    }
+    return next;
+  }
+  let knownIds: string[];
+  try {
+    const parsed: unknown = JSON.parse(snapshot);
+    knownIds = Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    knownIds = [];
+  }
+  const known = new Set(knownIds);
+  const introduced = (seed as Book[]).filter((book) => !known.has(book.id));
+  let next = data;
+  if (data.items.length && introduced.length) {
+    const missing = introduced.filter(
+      (book) => !data.items.some((item) => item.id === book.id),
+    );
+    if (missing.length) {
+      next = {
+        ...data,
+        items: [...data.items, ...missing.map((book) => clone(book))],
+      };
+      saveData(storage, next);
+    }
+  }
+  try {
+    storage.setItem(SEED_CATALOG_MIGRATION_KEY, JSON.stringify(currentIds));
+  } catch {
+    // The next load can retry the marker without changing learning data.
+  }
+  return next;
+}
 function migrateSeedBooks(storage: StoragePort, data: LearningData) {
-  return migrateSeedBook(
+  const legacyMigrated = migrateSeedBook(
     storage,
     migrateSeedBook(
       storage,
@@ -260,6 +332,7 @@ function migrateSeedBooks(storage: StoragePort, data: LearningData) {
     "enemy",
     ENEMY_SEED_MIGRATION_KEY,
   );
+  return migrateSeedCatalog(storage, legacyMigrated);
 }
 export function loadData(storage: StoragePort): {
   data: LearningData;
@@ -351,6 +424,7 @@ export function resetLearningData(
     SHOTS_SEED_MIGRATION_KEY,
     DEMONS_SEED_MIGRATION_KEY,
     ENEMY_SEED_MIGRATION_KEY,
+    SEED_CATALOG_MIGRATION_KEY,
   ]) {
     try {
       storage.removeItem(key);

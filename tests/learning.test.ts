@@ -21,6 +21,7 @@ import {
   saveData,
   DEMONS_SEED_MIGRATION_KEY,
   ENEMY_SEED_MIGRATION_KEY,
+  SEED_CATALOG_MIGRATION_KEY,
   SHOTS_SEED_MIGRATION_KEY,
   STATE_KEY,
   statistics,
@@ -172,6 +173,32 @@ describe("migration and persistence", () => {
     expect(storage.getItem(DEMONS_SEED_MIGRATION_KEY)).not.toBeNull();
     expect(storage.getItem(ENEMY_SEED_MIGRATION_KEY)).not.toBeNull();
     expect(loadData(storage).data.items.filter((book) => ["demons", "enemy"].includes(book.id))).toHaveLength(2);
+  });
+  it("automatically adds future seed books without another migration constant", () => {
+    const storage = memory();
+    const existing = initialData();
+    existing.items = existing.items.filter((book) => book.id !== "viva-la-vida");
+    saveData(storage, existing);
+    storage.setItem(
+      SEED_CATALOG_MIGRATION_KEY,
+      JSON.stringify(
+        initialData()
+          .items.filter((book) => book.id !== "viva-la-vida")
+          .map((book) => book.id),
+      ),
+    );
+    const loaded = loadData(storage);
+    expect(loaded.data.items.find((book) => book.id === "viva-la-vida")!.units).toHaveLength(30);
+    expect(loadData(storage).data.items.filter((book) => book.id === "viva-la-vida")).toHaveLength(1);
+  });
+  it("does not restore a known seed book after the user removes it", () => {
+    const storage = memory();
+    const existing = initialData();
+    existing.items = existing.items.filter((book) => book.id !== "viva-la-vida");
+    saveData(storage, existing);
+    const loaded = loadData(storage);
+    expect(loaded.data.items.some((book) => book.id === "viva-la-vida")).toBe(false);
+    expect(storage.getItem(SEED_CATALOG_MIGRATION_KEY)).not.toBeNull();
   });
   it("migrates legacy answered cards, settings and logs without modifying legacy keys", () => {
     const storage = memory();

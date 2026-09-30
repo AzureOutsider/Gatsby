@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "sourceDir": "content/books/sources",
+  "books": [
+    {
+      "id": "reading",
+      "title": "Reading Practice",
+      "type": "文章",
+      "author": "Gatsby · 原创示例",
+      "level": "入门",
+      "description": "用原创短句练习阅读，在语境中理解表达。",
+      "file": "reading.json"
+    },
+    {
+      "id": "conversation",
+      "title": "Everyday Conversation",
+      "type": "影视台词",
+      "author": "Gatsby · 原创示例",
+      "level": "入门",
+      "description": "原创日常对话示例，不摘录影视字幕。",
+      "file": "conversation.json"
+    },
+    {
+      "id": "core",
+      "title": "Core Vocabulary",
+      "type": "单词书",
+      "author": "Gatsby · 原创示例",
+      "level": "入门",
+      "description": "常用单词与原创例句，适合尝试翻卡和拼写。",
+      "file": "core.json"
+    },
+    {
+      "id": "phrases",
+      "title": "Phrases in Practice",
+      "type": "单词书",
+      "author": "Gatsby · 原创示例",
+      "level": "入门",
+      "description": "从原创生活场景中练习固定搭配。",
+      "file": "phrases.json"
+    }
+  ]
+}
