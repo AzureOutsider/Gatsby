@@ -18,6 +18,10 @@ import type {
 
 export const STATE_KEY = "gatsby-learning-state-v1";
 export const MIGRATION_KEY = "gatsby-before-redesign-v1";
+export const SEED_MIGRATION_KEY = "gatsby-seed-the-line-v1";
+export const SHOTS_SEED_MIGRATION_KEY = "gatsby-seed-shots-v1";
+export const DEMONS_SEED_MIGRATION_KEY = "gatsby-seed-demons-v1";
+export const ENEMY_SEED_MIGRATION_KEY = "gatsby-seed-enemy-v1";
 export const legacyKeys = {
   items: "english-study-library-v1",
   logs: "english-study-logs-v1",
@@ -218,6 +222,45 @@ function normalizeData(data: LearningData): LearningData {
       : "cards",
   };
 }
+function migrateSeedBook(
+  storage: StoragePort,
+  data: LearningData,
+  id: string,
+  migrationKey: string,
+) {
+  let next = data;
+  if (!storage.getItem(migrationKey)) {
+    const book = (seed as Book[]).find((item) => item.id === id);
+    if (book && data.items.length && !data.items.some((item) => item.id === id)) {
+      next = { ...data, items: [...data.items, clone(book)] };
+      saveData(storage, next);
+    }
+    try {
+      storage.setItem(migrationKey, new Date().toISOString());
+    } catch {
+      // The added seed remains usable in memory and will retry on the next load.
+    }
+  }
+  return next;
+}
+function migrateSeedBooks(storage: StoragePort, data: LearningData) {
+  return migrateSeedBook(
+    storage,
+    migrateSeedBook(
+      storage,
+      migrateSeedBook(
+        storage,
+        migrateSeedBook(storage, data, "the-line", SEED_MIGRATION_KEY),
+        "shots",
+        SHOTS_SEED_MIGRATION_KEY,
+      ),
+      "demons",
+      DEMONS_SEED_MIGRATION_KEY,
+    ),
+    "enemy",
+    ENEMY_SEED_MIGRATION_KEY,
+  );
+}
 export function loadData(storage: StoragePort): {
   data: LearningData;
   warning: string;
@@ -232,7 +275,7 @@ export function loadData(storage: StoragePort): {
     if (current) {
       const value: unknown = JSON.parse(current);
       validateBackup(value);
-      return { data: normalizeData(value), warning: "" };
+      return { data: migrateSeedBooks(storage, normalizeData(value)), warning: "" };
     }
     source = "旧版 English Study 数据";
     const raw: Record<string, string | null> = {};
@@ -264,13 +307,14 @@ export function loadData(storage: StoragePort): {
           [name]: name === "practiceMode" ? raw[name] : JSON.parse(raw[name]!),
         });
     }
+    const migrated = migrateSeedBooks(storage, data);
     const payload = {
-      ...data,
+      ...migrated,
       version: 1,
       exportedAt: new Date().toISOString(),
     };
     validateBackup(payload);
-    return { data: normalizeData(data), warning: "", notice };
+    return { data: normalizeData(migrated), warning: "", notice };
   } catch (error) {
     if (error instanceof DataValidationError) {
       field = error.field;
@@ -300,7 +344,14 @@ export function resetLearningData(
   // Commit fresh state before cleanup. If this write fails, no old key is removed.
   saveData(storage, data);
   const remainingKeys: string[] = [];
-  for (const key of [...Object.values(legacyKeys), MIGRATION_KEY]) {
+  for (const key of [
+    ...Object.values(legacyKeys),
+    MIGRATION_KEY,
+    SEED_MIGRATION_KEY,
+    SHOTS_SEED_MIGRATION_KEY,
+    DEMONS_SEED_MIGRATION_KEY,
+    ENEMY_SEED_MIGRATION_KEY,
+  ]) {
     try {
       storage.removeItem(key);
     } catch {

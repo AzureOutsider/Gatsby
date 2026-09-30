@@ -84,7 +84,7 @@ it("resets only the known application keys and reloads cleanly", () => {
   };
   const result = resetLearningData(port);
   expect(result.remainingKeys).toEqual([]);
-  expect(result.data.items).toHaveLength(5);
+  expect(result.data.items).toHaveLength(9);
   expect(result.data.round).toBeNull();
   expect(result.data.logs).toEqual([]);
   for (const key of [...Object.values(legacyKeys), MIGRATION_KEY])

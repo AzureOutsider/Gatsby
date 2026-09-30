@@ -19,6 +19,9 @@ import {
   resetBook,
   saveBook,
   saveData,
+  DEMONS_SEED_MIGRATION_KEY,
+  ENEMY_SEED_MIGRATION_KEY,
+  SHOTS_SEED_MIGRATION_KEY,
   STATE_KEY,
   statistics,
   validateBackup,
@@ -47,11 +50,13 @@ function gateData() {
 
 describe("existing learning behavior", () => {
   it("keeps all seed books including Viva La Vida", () => {
-    expect(initialData().items).toHaveLength(5);
+    expect(initialData().items).toHaveLength(9);
     expect(
       initialData().items.find((book) => book.id === "viva-la-vida")!.units
         .length,
     ).toBeGreaterThan(10);
+    expect(initialData().items.find((book) => book.id === "demons")!.units).toHaveLength(36);
+    expect(initialData().items.find((book) => book.id === "enemy")!.units).toHaveLength(55);
   });
   it("normalizes capitalization, apostrophes and punctuation", () => {
     expect(normalizeAnswer(" Hold-something / dear! ")).toBe(
@@ -134,6 +139,40 @@ describe("existing learning behavior", () => {
   });
 });
 describe("migration and persistence", () => {
+  it("adds the new The Line seed book once to an existing Gatsby state", () => {
+    const storage = memory();
+    const existing = initialData();
+    existing.items = existing.items.filter((book) => book.id !== "the-line");
+    saveData(storage, existing);
+    const loaded = loadData(storage);
+    expect(loaded.data.items.some((book) => book.id === "the-line")).toBe(true);
+    expect(loaded.data.items.find((book) => book.id === "the-line")!.units).toHaveLength(26);
+    const second = loadData(storage);
+    expect(second.data.items.filter((book) => book.id === "the-line")).toHaveLength(1);
+  });
+  it("adds the Shots seed book once to an existing Gatsby state", () => {
+    const storage = memory();
+    const existing = initialData();
+    existing.items = existing.items.filter((book) => book.id !== "shots");
+    saveData(storage, existing);
+    const loaded = loadData(storage);
+    expect(loaded.data.items.find((book) => book.id === "shots")!.units).toHaveLength(30);
+    expect(storage.getItem(SHOTS_SEED_MIGRATION_KEY)).not.toBeNull();
+  });
+  it("adds Demons and Enemy seed books once to an existing Gatsby state", () => {
+    const storage = memory();
+    const existing = initialData();
+    existing.items = existing.items.filter(
+      (book) => book.id !== "demons" && book.id !== "enemy",
+    );
+    saveData(storage, existing);
+    const loaded = loadData(storage);
+    expect(loaded.data.items.find((book) => book.id === "demons")!.units).toHaveLength(36);
+    expect(loaded.data.items.find((book) => book.id === "enemy")!.units).toHaveLength(55);
+    expect(storage.getItem(DEMONS_SEED_MIGRATION_KEY)).not.toBeNull();
+    expect(storage.getItem(ENEMY_SEED_MIGRATION_KEY)).not.toBeNull();
+    expect(loadData(storage).data.items.filter((book) => ["demons", "enemy"].includes(book.id))).toHaveLength(2);
+  });
   it("migrates legacy answered cards, settings and logs without modifying legacy keys", () => {
     const storage = memory();
     const original = feedback(roundData(), "forgot");
@@ -273,7 +312,7 @@ describe("content and statistics", () => {
   it("deletes only the requested book and related records", () => {
     const data = feedback(roundData(), "remembered");
     const next = resetBook(data, "core", true);
-    expect(next.items).toHaveLength(4);
+    expect(next.items).toHaveLength(8);
     expect(next.items.some((book) => book.id === "viva-la-vida")).toBe(true);
     expect(next.logs).toHaveLength(0);
     expect(next.round).toBeNull();

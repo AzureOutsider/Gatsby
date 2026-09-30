@@ -57,7 +57,7 @@ export function DataTools({ onClose }: { onClose: () => void }) {
   function reset() {
     if (
       !confirm(
-        "确定清除学习测试数据并重新开始？\n将删除此浏览器当前地址下 Gatsby / English Study 的自定义内容、复习记录、轮次进度、设置及旧版快照，恢复5份内置词书（含 Viva La Vida）。\n不会清理其他网站的数据。没有外部备份时无法恢复这些测试数据。",
+        "确定清除学习测试数据并重新开始？\n将删除此浏览器当前地址下 Gatsby / English Study 的自定义内容、复习记录、轮次进度、设置及旧版快照，恢复9份内置词书（含 The Line、Shots、Demons 和 Enemy）。\n不会清理其他网站的数据。没有外部备份时无法恢复这些测试数据。",
       )
     )
       return;
