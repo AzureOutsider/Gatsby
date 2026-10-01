@@ -22,11 +22,6 @@ import {
   MIGRATION_KEY,
 } from "../src/store/learning";
 
-vi.mock("../src/features/flashcards/audio", () => ({
-  warmWord: vi.fn(),
-  stopAudio: vi.fn(),
-  playWord: vi.fn(),
-}));
 beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal("scrollTo", vi.fn());

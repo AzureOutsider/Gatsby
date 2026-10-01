@@ -1,93 +1,164 @@
-// No request is allowed to block a click. Fetch and preload dictionary audio only as an enhancement.
-const readyAudio = new Map<string, HTMLAudioElement>();
-const fetching = new Set<string>();
-let currentAudio: HTMLAudioElement | null = null;
-let speechTimer: ReturnType<typeof setTimeout> | undefined;
+import type { PronunciationSettings } from "../../types";
+import {
+  englishVoices,
+  resolveVoice,
+  supportedSpeech,
+  voiceLabel,
+} from "./voices";
+
+export type AudioPhase = "idle" | "preparing" | "playing" | "failed";
+export interface AudioState {
+  phase: AudioPhase;
+  owner: string;
+  message: string;
+  voice: string;
+  backup: boolean;
+}
+const idle: AudioState = {
+  phase: "idle",
+  owner: "",
+  message: "",
+  voice: "",
+  backup: false,
+};
+let state = idle;
 let generation = 0;
+let cleanup = () => {};
+let utterance: SpeechSynthesisUtterance | null = null;
+const listeners = new Set<() => void>();
+export const audioSnapshot = () => state;
+export function subscribeAudio(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+function publish(next: AudioState) {
+  state = next;
+  listeners.forEach((listener) => listener());
+}
 export function stopAudio() {
   generation++;
-  clearTimeout(speechTimer);
-  currentAudio?.pause();
-  currentAudio = null;
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  cleanup();
+  cleanup = () => {};
+  utterance = null;
+  if (supportedSpeech()) window.speechSynthesis.cancel();
+  publish(idle);
 }
-function speak(text: string, notify: (message: string) => void, token: number) {
-  if (!("speechSynthesis" in window)) {
-    notify("此浏览器没有语音功能，请使用 Edge 或 Chrome 并启用英语语音。");
-    return;
-  }
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
-  utterance.rate = 0.9;
-  const voices = window.speechSynthesis.getVoices();
-  const voice =
-    voices.find((v) => /^en[-_]US$/i.test(v.lang) && v.localService) ||
-    voices.find((v) => /^en/i.test(v.lang));
-  if (voice) utterance.voice = voice;
-  utterance.onerror = (event) => {
-    if (
-      token === generation &&
-      !["interrupted", "canceled"].includes(event.error)
-    )
-      notify("英语语音暂不可用，请检查系统英语语音包或网络。");
-  };
-  speechTimer = setTimeout(() => {
-    if (token === generation) window.speechSynthesis.speak(utterance);
-  }, 0);
-}
-export async function warmWord(text: string) {
-  const word = text.trim().toLowerCase();
-  if (!/^[a-z'-]+$/.test(word) || readyAudio.has(word) || fetching.has(word))
-    return;
-  fetching.add(word);
-  try {
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
-      { signal: AbortSignal.timeout(3500), cache: "force-cache" },
-    );
-    if (!response.ok) return;
-    const data = await response.json();
-    const url = data?.[0]?.phonetics?.find((entry: { audio?: string }) =>
-      entry.audio?.startsWith("https://"),
-    )?.audio;
-    if (!url) return;
-    const audio = new Audio();
-    audio.preload = "auto";
-    audio.src = url;
-    audio.addEventListener(
-      "canplaythrough",
-      () => readyAudio.set(word, audio),
-      { once: true },
-    );
-    audio.load();
-  } catch {
-    /* Optional enhancement: speech synthesis remains available. */
-  }
-}
-export function playWord(text: string, notify: (message: string) => void) {
+// Only the explicitly chosen voice is used. A fallback requires a separate user action.
+export function playWord(
+  text: string,
+  settings: PronunciationSettings,
+  owner: string,
+  backup = false,
+) {
   stopAudio();
-  const token = generation,
-    audio = readyAudio.get(text.trim().toLowerCase());
-  if (audio && audio.readyState >= 3) {
-    currentAudio = audio;
-    audio.currentTime = 0;
-    let started = false;
-    let fellBack = false;
-    const fallback = () => {
-      if (token === generation && !started && !fellBack) {
-        fellBack = true;
-        clearTimeout(timeout);
-        audio.pause();
-        speak(text, notify, token);
+  const token = generation;
+  const choice = backup ? settings.backupVoice : settings.voice;
+  publish({
+    phase: "preparing",
+    owner,
+    message: "",
+    voice: choice ? voiceLabel(choice) : "",
+    backup,
+  });
+  function fail(message: string) {
+    if (token !== generation) return;
+    generation++;
+    cleanup();
+    cleanup = () => {};
+    utterance = null;
+    if (supportedSpeech()) window.speechSynthesis.cancel();
+    publish({ ...state, phase: "failed", message });
+  }
+  if (!supportedSpeech() || typeof SpeechSynthesisUtterance === "undefined") {
+    fail("此浏览器不支持语音播放，请使用支持语音的 Edge 或 Chrome。");
+    return;
+  }
+  if (!choice) {
+    fail(
+      backup
+        ? "尚未选择备用声音，请打开发音设置。"
+        : "请先在发音设置中试听并选择主声音。",
+    );
+    return;
+  }
+  const synth = window.speechSynthesis;
+  let voiceWait: ReturnType<typeof setTimeout> | undefined;
+  let speakTimer: ReturnType<typeof setTimeout> | undefined;
+  let startWait: ReturnType<typeof setTimeout> | undefined;
+  let queued = false;
+  cleanup = () => {
+    clearTimeout(voiceWait);
+    clearTimeout(speakTimer);
+    clearTimeout(startWait);
+    synth.removeEventListener("voiceschanged", voicesChanged);
+  };
+  function start() {
+    if (token !== generation || queued) return;
+    const voice = resolveVoice(choice!);
+    if (!voice) {
+      fail(
+        "已选声音在当前浏览器不可用。请检查语音包，或在发音设置中重新选择；也可主动使用备用声音。",
+      );
+      return;
+    }
+    queued = true;
+    clearTimeout(voiceWait);
+    synth.removeEventListener("voiceschanged", voicesChanged);
+    const speech = new SpeechSynthesisUtterance(text);
+    utterance = speech; // Retain while active: some engines otherwise drop events.
+    speech.voice = voice;
+    speech.lang = voice.lang;
+    speech.rate = settings.rate;
+    speech.onstart = () => {
+      if (token !== generation) return;
+      clearTimeout(startWait);
+      publish({ ...state, phase: "playing" });
+    };
+    speech.onend = () => {
+      if (token !== generation) return;
+      generation++;
+      cleanup();
+      cleanup = () => {};
+      utterance = null;
+      publish({ ...state, phase: "idle" });
+    };
+    speech.onerror = (event) => {
+      const messages: Record<string, string> = {
+        network: "在线声音连接失败，请检查网络后重试，或主动使用备用声音。",
+        "not-allowed": "浏览器阻止了播放，请再次点击播放按钮并检查站点权限。",
+        "voice-unavailable": "已选声音不可用，请在发音设置中重新选择。",
+        "language-unavailable":
+          "英语语音包不可用，请安装语音包或选择其他声音。",
+        "audio-busy": "音频设备正忙，请关闭其他播放后重试。",
+        "audio-hardware": "音频设备不可用，请检查输出设备后重试。",
+      };
+      fail(
+        messages[event.error] ||
+          "语音播放失败，请重试或在发音设置中选择其他声音。",
+      );
+    };
+    // Let cancel() settle without waiting for any dictionary request.
+    speakTimer = setTimeout(() => {
+      if (token !== generation) return;
+      startWait = setTimeout(
+        () => fail("声音准备超过 10 秒，请重试、检查网络或主动使用备用声音。"),
+        10000,
+      );
+      try {
+        synth.speak(speech);
+      } catch {
+        fail("无法启动语音，请重试或在发音设置中选择其他声音。");
       }
-    };
-    const timeout = setTimeout(fallback, 700);
-    audio.onplaying = () => {
-      started = true;
-      clearTimeout(timeout);
-    };
-    audio.onerror = fallback;
-    void audio.play().catch(fallback);
-  } else speak(text, notify, token);
-  void warmWord(text);
+    }, 0);
+  }
+  function voicesChanged() {
+    if (englishVoices().length) start();
+  }
+  if (englishVoices().length) start();
+  else {
+    synth.addEventListener("voiceschanged", voicesChanged);
+    voiceWait = setTimeout(start, 3000);
+  }
 }

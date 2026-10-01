@@ -1,5 +1,9 @@
 import seed from "../data/seed.json";
 import {
+  defaultPronunciation,
+  validPronunciation,
+} from "../features/flashcards/voices";
+import {
   DataValidationError,
   diagnoseData,
   type DataDiagnostic,
@@ -58,6 +62,7 @@ export function initialData(): LearningData {
     roundSize: 10,
     dailyGoal: 10,
     practiceMode: "cards",
+    pronunciation: clone(defaultPronunciation),
   };
 }
 function object(value: unknown): value is Record<string, unknown> {
@@ -227,6 +232,12 @@ export function validateBackup(value: unknown): asserts value is Backup {
       "homeBookIds",
       "应为词书 ID 数组",
     );
+  if (value.pronunciation !== undefined)
+    requireField(
+      validPronunciation(value.pronunciation),
+      "pronunciation",
+      "发音声音或语速设置无效",
+    );
 }
 function validHomeBookIds(data: LearningData): string[] {
   const available = new Set(data.items.map((book) => book.id));
@@ -244,6 +255,7 @@ function normalizeData(data: LearningData): LearningData {
   return {
     ...data,
     homeBookIds: validHomeBookIds(data),
+    pronunciation: data.pronunciation || clone(defaultPronunciation),
     round: normalizeRound(data.round),
     roundSize: [5, 10, 15, 20].includes(Number(data.roundSize))
       ? Number(data.roundSize)
@@ -265,7 +277,11 @@ function migrateSeedBook(
   let next = data;
   if (!storage.getItem(migrationKey)) {
     const book = (seed as Book[]).find((item) => item.id === id);
-    if (book && data.items.length && !data.items.some((item) => item.id === id)) {
+    if (
+      book &&
+      data.items.length &&
+      !data.items.some((item) => item.id === id)
+    ) {
       next = { ...data, items: [...data.items, clone(book)] };
       saveData(storage, next);
     }
@@ -368,7 +384,10 @@ export function loadData(storage: StoragePort): {
     if (current) {
       const value: unknown = JSON.parse(current);
       validateBackup(value);
-      return { data: migrateSeedBooks(storage, normalizeData(value)), warning: "" };
+      return {
+        data: migrateSeedBooks(storage, normalizeData(value)),
+        warning: "",
+      };
     }
     source = "旧版 English Study 数据";
     const raw: Record<string, string | null> = {};
@@ -492,6 +511,7 @@ export function importBackup(
     dailyGoal: value.dailyGoal ?? data.dailyGoal,
     practiceMode: value.practiceMode ?? data.practiceMode,
     homeBookIds: value.homeBookIds ?? data.homeBookIds,
+    pronunciation: value.pronunciation ?? data.pronunciation,
   });
 }
 export function units(data: LearningData, source = "all"): Card[] {

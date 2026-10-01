@@ -19,7 +19,7 @@ import { Flashcard } from "../features/flashcards/Flashcard";
 import { Spelling } from "../features/spelling/Spelling";
 import { RoundSetup } from "../features/learning-round/RoundSetup";
 import { RoundHistory } from "../features/learning-round/RoundHistory";
-import { stopAudio, warmWord } from "../features/flashcards/audio";
+import { stopAudio } from "../features/flashcards/audio";
 export function ReviewPage({ source }: { source: string }) {
   const { data, update, setView, notify } = useLearning(),
     round = data.round;
@@ -31,9 +31,16 @@ export function ReviewPage({ source }: { source: string }) {
       : round.cardQueue[round.cardIndex]
     : free?.queue[free.index];
   useEffect(() => {
-    if (card) void warmWord(card.prompt);
+    stopAudio();
     return stopAudio;
-  }, [card?.prompt]);
+  }, [
+    card?.prompt,
+    card?.itemId,
+    round?.cardIndex,
+    round?.spellingIndex,
+    round?.stage,
+    free?.index,
+  ]);
   function leave() {
     setView("home");
     notify(round ? "本轮进度已保存，下次可以接着学。" : "已离开自由练习。");

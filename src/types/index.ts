@@ -84,6 +84,21 @@ export interface LearningData {
   dailyGoal: number;
   practiceMode: Mode;
   homeBookIds?: string[];
+  pronunciation?: PronunciationSettings;
+}
+
+export interface VoiceChoice {
+  uri: string;
+  name: string;
+  lang: string;
+  local: boolean;
+}
+
+export interface PronunciationSettings {
+  accent: "en-US" | "en-GB" | "en";
+  voice: VoiceChoice | null;
+  backupVoice: VoiceChoice | null;
+  rate: number;
 }
 export interface Backup extends LearningData {
   version: number;

@@ -8,6 +8,7 @@ import {
   Search,
   Moon,
   ArrowUpRight,
+  Volume2,
 } from "lucide-react";
 import { brand } from "./data/design";
 import { useLearning } from "./store/LearningProvider";
@@ -19,6 +20,8 @@ import { ReviewPage } from "./pages/ReviewPage";
 import { StatisticsPage } from "./pages/StatisticsPage";
 import { DataTools } from "./features/statistics/DataTools";
 import { Modal } from "./components/UI";
+import { PronunciationSettings } from "./features/flashcards/PronunciationSettings";
+import { stopAudio } from "./features/flashcards/audio";
 
 const navigation = [
   { id: "home", label: "今日学习", icon: House },
@@ -30,7 +33,13 @@ export default function App() {
   const { data, view, setView, message, storageWarning, sessionRevision } =
     useLearning();
   const [source, setSource] = useState("all"),
-    [modal, setModal] = useState<"shortcuts" | "data" | "logo" | null>(null);
+    [modal, setModal] = useState<
+      "shortcuts" | "data" | "logo" | "pronunciation" | null
+    >(null);
+  const pronunciationKey = JSON.stringify(data.pronunciation);
+  useEffect(() => {
+    stopAudio();
+  }, [view, modal, sessionRevision, pronunciationKey]);
   const due = statistics(data).due;
   function start(source = "all") {
     setSource(source);
@@ -183,6 +192,14 @@ export default function App() {
           <div className="header-tools">
             <button
               className="icon-btn"
+              onClick={() => setModal("pronunciation")}
+              aria-label="发音设置"
+              title="发音设置与试听"
+            >
+              <Volume2 size={20} aria-hidden="true" />
+            </button>
+            <button
+              className="icon-btn"
               onClick={search}
               aria-label="搜索内容"
               title="搜索 · Ctrl+K"
@@ -241,6 +258,9 @@ export default function App() {
         </div>
       )}
       {modal === "data" && <DataTools onClose={() => setModal(null)} />}
+      {modal === "pronunciation" && (
+        <PronunciationSettings onClose={() => setModal(null)} />
+      )}
       {modal === "logo" && (
         <Modal title="Gatsby" onClose={() => setModal(null)}>
           <img
