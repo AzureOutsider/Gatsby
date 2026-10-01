@@ -9,7 +9,8 @@
     "sync-books": "node scripts/sync-books.mjs --apply",
     "check-books": "node scripts/sync-books.mjs --check",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "vitest run && node --test tests/app-state.test.cjs"
+    "test": "vitest run && node --test tests/app-state.test.cjs",
+    "check-contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {
     "@fontsource-variable/nunito": "^5.2.0",

@@ -8,7 +8,13 @@
   --blue: #8cbac7;
   --rose: #bd7f8f;
   --green: #8bbcaa;
-  --muted: #bcaeaa;
+  --muted: #c8bbb3;
+  --text-xs: 0.875rem; /* 14px: badges, dates and compact metadata */
+  --text-sm: 0.9375rem; /* 15px: sources and progress labels */
+  --text-meta: 1rem; /* 16px: short supporting text */
+  --text-control: 1.0625rem; /* 17px: controls and page introductions */
+  --text-body: 1.125rem; /* 18px: explanations and learning notes */
+  --text-study: 1.375rem; /* 22px: English context sentences */
   --line: rgba(215, 183, 124, 0.23);
   --surface: rgba(39, 32, 35, 0.88);
   --radius: 18px;
@@ -24,8 +30,8 @@ body {
   margin: 0;
   background: var(--night);
   color: var(--ivory);
-  font: 18px/1.65 var(--font);
-  min-width: 760px;
+  font: 19px/1.68 var(--font);
+  min-width: 740px;
 }
 button,
 input,
@@ -43,7 +49,7 @@ button {
 }
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.72;
 }
 button:focus-visible,
 a:focus-visible,
@@ -93,7 +99,7 @@ textarea {
 }
 input::placeholder,
 textarea::placeholder {
-  color: #bcaeaaae;
+  color: var(--muted);
 }
 textarea {
   resize: vertical;
@@ -110,7 +116,7 @@ label {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-body);
 }
 fieldset {
   margin: 0;
@@ -119,15 +125,15 @@ fieldset {
 }
 legend {
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-body);
   margin-bottom: 9px;
 }
 kbd {
-  font: 600 12px/1.5 var(--font);
+  font: 600 var(--text-xs)/1.5 var(--font);
   border: 1px solid currentColor;
   border-radius: 5px;
   padding: 1px 6px;
-  opacity: 0.65;
+  opacity: 1;
   white-space: nowrap;
 }
 button kbd {
@@ -257,7 +263,7 @@ button kbd {
   letter-spacing: 0.015em;
 }
 .brand-copy span {
-  font-size: 12px;
+  font-size: var(--text-xs);
   line-height: 1.5;
   letter-spacing: 0.12em;
   color: var(--muted);
@@ -279,7 +285,7 @@ button kbd {
   border-radius: 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-control);
 }
 .nav-item:hover {
   background: #d7b77c09;
@@ -291,7 +297,7 @@ button kbd {
   color: var(--gold);
 }
 .nav-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   background: #d7b77c22;
   border-radius: 20px;
@@ -307,7 +313,7 @@ button kbd {
   align-items: center;
   gap: 7px;
   color: var(--gold);
-  font-size: 12px;
+  font-size: var(--text-xs);
   border-left: 1px solid var(--line);
   padding-left: 15px;
   margin-left: 5px;
@@ -351,7 +357,7 @@ button kbd {
   gap: 9px;
   padding: 12px 21px;
   border-radius: 11px;
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 700;
   line-height: 1.5;
   min-height: 48px;
@@ -384,7 +390,7 @@ button kbd {
   border: 0;
   padding: 4px 0;
   color: var(--gold);
-  font-size: 14px;
+  font-size: var(--text-meta);
   text-decoration: none;
 }
 .text-btn:hover {
@@ -407,7 +413,7 @@ button kbd {
   padding: 3px 11px;
   color: var(--gold);
   background: #d7b77c08;
-  font-size: 12px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -451,7 +457,7 @@ button kbd {
   overflow-wrap: anywhere;
 }
 .page-head p {
-  font-size: 15px;
+  font-size: var(--text-control);
   color: var(--muted);
   margin-top: 10px;
   line-height: 1.8;
@@ -462,18 +468,19 @@ button kbd {
   align-items: center;
   gap: 20px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 .section-heading h2 {
   font-size: 23px;
   font-weight: 600;
 }
 .section-heading p {
-  font-size: 14px;
+  font-size: var(--text-meta);
   color: var(--muted);
   margin-top: 5px;
 }
 .section-heading > span {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .app-footer {
   display: flex;
@@ -483,10 +490,10 @@ button kbd {
   padding: 23px 0;
   margin-top: 48px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 .app-footer .text-btn {
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 .home-greeting {
   display: flex;
@@ -494,7 +501,7 @@ button kbd {
   justify-content: space-between;
   margin-bottom: 23px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .home-greeting > span {
   display: flex;
@@ -502,7 +509,7 @@ button kbd {
   gap: 8px;
 }
 .home-greeting time {
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 .home-hero-grid {
   display: grid;
@@ -540,7 +547,8 @@ button kbd {
       90deg,
       #17141c 0%,
       #17141cf8 20%,
-      #17141ccf 39%,
+      #17141cf0 39%,
+      #17141ce6 55%,
       #17141c08 78%
     ),
     linear-gradient(0deg, #17141ca0, transparent 45%);
@@ -555,7 +563,7 @@ button kbd {
 }
 .hero-intro {
   color: var(--gold);
-  font-size: 13px;
+  font-size: var(--text-sm);
   letter-spacing: 0.04em;
   margin-bottom: 22px;
 }
@@ -571,8 +579,8 @@ button kbd {
   letter-spacing: 0.06em;
 }
 .hero-description {
-  color: #ccbeb7;
-  font-size: 15px;
+  color: var(--ivory);
+  font-size: var(--text-body);
   line-height: 1.85;
   margin-top: 20px;
 }
@@ -583,8 +591,11 @@ button kbd {
   position: absolute;
   bottom: 24px;
   right: 25px;
-  font-size: 11px;
-  color: #eedab5;
+  font-size: var(--text-xs);
+  color: var(--ivory);
+  background: var(--night);
+  border-radius: 6px;
+  padding: 4px 8px;
   text-shadow: 0 1px 4px #000;
 }
 .daily-card {
@@ -610,7 +621,7 @@ button kbd {
 }
 .daily-number span {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   font-weight: 400;
   margin-top: 6px;
@@ -623,16 +634,16 @@ button kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-bottom: 10px;
   color: var(--muted);
 }
 .daily-goal strong {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--ivory);
 }
 .streak-line {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
   margin-top: 15px;
 }
@@ -648,10 +659,10 @@ button kbd {
   gap: 20px;
 }
 .resume-strip strong {
-  font-size: 16px;
+  font-size: var(--text-body);
 }
 .resume-strip p {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin-top: 3px;
   padding-left: 15px;
@@ -670,6 +681,7 @@ button kbd {
   gap: 14px;
   padding-left: 24px;
   border-left: 1px solid var(--line);
+  flex-wrap: wrap;
 }
 .metric:first-child {
   padding-left: 0;
@@ -680,7 +692,7 @@ button kbd {
   font-size: 29px;
 }
 .metric span {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 .home-books {
@@ -718,7 +730,7 @@ button kbd {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 16px;
+  font-size: var(--text-body);
 }
 .home-book-number {
   color: var(--gold);
@@ -748,7 +760,6 @@ button kbd {
   border-color: var(--gold);
 }
 .home-book-option.unavailable {
-  opacity: 0.6;
   cursor: not-allowed;
 }
 .home-book-option input {
@@ -764,7 +775,7 @@ button kbd {
 }
 .home-book-option small {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .home-book-picker-footer {
@@ -844,12 +855,12 @@ button kbd {
   overflow-wrap: anywhere;
 }
 .book-author {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin-top: 7px;
 }
 .book-description {
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.8;
   color: var(--muted);
   margin: 14px 0 22px;
@@ -859,9 +870,10 @@ button kbd {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
   margin-bottom: 9px;
+  flex-wrap: wrap;
 }
 .book-footer {
   display: flex;
@@ -895,13 +907,13 @@ button kbd {
   border: 1px solid #bcaeaa60;
   background: #17141c50;
   border-radius: 12px;
-  width: min(350px, 100%);
+  width: min(390px, 100%);
 }
 .search-field input {
   border: 0;
   padding: 12px 0;
   background: transparent;
-  font-size: 15px;
+  font-size: var(--text-control);
 }
 .search-field:focus-within {
   outline: 2px solid var(--blue);
@@ -920,7 +932,7 @@ button kbd {
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-meta);
   padding: 9px 13px;
 }
 .filter-btn:hover {
@@ -932,7 +944,7 @@ button kbd {
   border-color: #d7b77c45;
 }
 .library-summary {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin: 23px 0 19px;
 }
@@ -951,7 +963,7 @@ button kbd {
   border-radius: 16px;
   text-align: center;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-body);
   line-height: 1.9;
 }
 .empty-state button {
@@ -976,7 +988,7 @@ button kbd {
   margin: 18px 0;
 }
 .setup-copy > p {
-  font-size: 15px;
+  font-size: var(--text-control);
   line-height: 1.85;
   color: var(--muted);
 }
@@ -986,7 +998,7 @@ button kbd {
   gap: 14px;
   margin-top: 32px;
   color: var(--gold);
-  font-size: 13px;
+  font-size: var(--text-sm);
   flex-wrap: wrap;
 }
 .learning-steps span {
@@ -1016,7 +1028,7 @@ button kbd {
   font-size: 23px;
 }
 .size-options button small {
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-left: 4px;
 }
 .size-options .selected {
@@ -1050,11 +1062,11 @@ button kbd {
   gap: 4px;
 }
 .history-row strong {
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 .history-row span:not(.badge) {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .review-head-actions {
@@ -1064,19 +1076,19 @@ button kbd {
   flex-shrink: 0;
 }
 .review-head-actions > .text-btn {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .round-progress-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin-bottom: 9px;
 }
 .round-progress-heading strong {
   color: var(--gold);
-  font-size: 16px;
+  font-size: var(--text-body);
 }
 .review-layout {
   display: grid;
@@ -1096,7 +1108,7 @@ button kbd {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   flex-wrap: wrap;
 }
@@ -1126,8 +1138,8 @@ button kbd {
   border-radius: 50%;
 }
 .study-context {
-  font-size: 20px;
-  color: #c8bbb3;
+  font-size: var(--text-study);
+  color: var(--ivory);
   line-height: 1.8;
   margin-top: 21px;
   max-width: 70ch;
@@ -1139,7 +1151,7 @@ button kbd {
   align-items: center;
   padding: 24px 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-meta);
 }
 .study-actions {
   display: flex;
@@ -1165,14 +1177,15 @@ button kbd {
 }
 .answer-panel p {
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-body);
   line-height: 1.85;
   margin-top: 10px;
   white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 .feedback-note {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--blue);
   margin-top: 14px;
 }
@@ -1181,7 +1194,7 @@ button kbd {
   background: #211d23d9;
 }
 .queue-panel h2 {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   margin-bottom: 12px;
 }
@@ -1194,12 +1207,12 @@ button kbd {
 }
 .queue-row strong {
   display: block;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .queue-row span:not(.queue-dot) {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .queue-dot {
@@ -1213,25 +1226,25 @@ button kbd {
   background: #8cbac760;
 }
 .queue-note {
-  font-size: 15px;
+  font-size: var(--text-body);
   line-height: 1.9;
   color: var(--muted);
 }
 .queue-bottom {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
   margin-top: 27px;
 }
 .queue-bottom p {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .practice-footnote {
   display: flex;
   gap: 20px;
   align-items: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-top: 22px;
   flex-wrap: wrap;
 }
@@ -1258,7 +1271,7 @@ button kbd {
   font-weight: 500;
 }
 .gate-card > p {
-  font-size: 16px;
+  font-size: var(--text-body);
   color: var(--muted);
   line-height: 1.85;
   margin-top: 15px;
@@ -1277,12 +1290,12 @@ button kbd {
   gap: 10px;
 }
 .gate-detail strong span {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   font-weight: 400;
 }
 .study-instruction {
-  font-size: 14px;
+  font-size: var(--text-meta);
   color: var(--muted);
   margin-top: 26px;
 }
@@ -1316,7 +1329,7 @@ button kbd {
 }
 .mode-switch button {
   padding: 8px 17px;
-  font-size: 14px;
+  font-size: var(--text-meta);
   border-radius: 9px;
   border: 1px solid var(--line);
   background: transparent;
@@ -1339,7 +1352,7 @@ button kbd {
   padding: 24px;
 }
 .stat-card span {
-  font-size: 14px;
+  font-size: var(--text-meta);
   color: var(--muted);
 }
 .stat-card strong {
@@ -1375,7 +1388,7 @@ button kbd {
   gap: 7px;
 }
 .bar-column > span {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .bar-space {
@@ -1399,7 +1412,7 @@ button kbd {
   margin-top: 20px;
 }
 .goal-card > p {
-  font-size: 14px;
+  font-size: var(--text-meta);
   color: var(--muted);
   margin-top: 12px;
 }
@@ -1436,10 +1449,10 @@ button kbd {
 }
 .weak-row > div span {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-meta);
 }
 .weak-row > span {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .modal {
   border: 1px solid #d7b77c60;
@@ -1472,7 +1485,7 @@ button kbd {
 }
 .modal-copy {
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-body);
   line-height: 1.85;
 }
 .modal-actions {
@@ -1491,15 +1504,15 @@ button kbd {
   gap: 17px;
 }
 .form-help {
-  font-size: 12px;
+  font-size: var(--text-meta);
   line-height: 1.75;
   color: var(--muted);
 }
 .units-editor {
-  font-size: 16px;
+  font-size: var(--text-body);
 }
 .form-error {
-  font-size: 14px;
+  font-size: var(--text-meta);
   color: #f0aab9;
 }
 .file-field {
@@ -1507,10 +1520,10 @@ button kbd {
   align-items: center;
   gap: 15px;
   flex-wrap: wrap;
-  font-size: 14px;
+  font-size: var(--text-meta);
 }
 .file-field input {
-  font-size: 13px;
+  font-size: var(--text-sm);
   padding: 8px;
 }
 .data-section {
@@ -1528,17 +1541,17 @@ button kbd {
 }
 .shortcut-grid {
   display: grid;
-  grid-template-columns: 1fr 1.2fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 24px;
   margin-bottom: 25px;
 }
 .shortcut-grid h3 {
-  font-size: 16px;
+  font-size: var(--text-body);
   color: var(--gold);
   margin-bottom: 16px;
 }
 .shortcut-grid p {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin: 10px 0;
   line-height: 1.9;
@@ -1564,7 +1577,7 @@ button kbd {
   color: var(--ivory);
   padding: 14px 24px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: var(--text-meta);
   max-width: 600px;
   width: max-content;
 }
@@ -1578,7 +1591,7 @@ button kbd {
   border: 1px solid var(--rose);
   border-radius: 12px;
   margin-bottom: 25px;
-  font-size: 15px;
+  font-size: var(--text-control);
 }
 .skip-link {
   position: fixed;
@@ -1607,7 +1620,7 @@ button kbd {
   grid-template-columns: 90px minmax(0, 1fr);
   gap: 8px 14px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .diagnostic-panel dt {
   color: var(--muted);
@@ -1660,7 +1673,7 @@ button kbd {
     padding-left: 17px;
   }
   .metric span {
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
   .book-card {
     padding: 21px 20px 16px;
