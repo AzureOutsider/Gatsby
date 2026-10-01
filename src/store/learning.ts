@@ -220,10 +220,30 @@ export function validateBackup(value: unknown): asserts value is Backup {
     "round",
     "轮次卡片、阶段或队列位置无效",
   );
+  if (value.homeBookIds !== undefined)
+    requireField(
+      Array.isArray(value.homeBookIds) &&
+        value.homeBookIds.every((id) => typeof id === "string"),
+      "homeBookIds",
+      "应为词书 ID 数组",
+    );
+}
+function validHomeBookIds(data: LearningData): string[] {
+  const available = new Set(data.items.map((book) => book.id));
+  return [...new Set(data.homeBookIds || [])]
+    .filter((id) => available.has(id))
+    .slice(0, 3);
+}
+export function homeBooks(data: LearningData): Book[] {
+  const selected = validHomeBookIds(data);
+  return selected.length
+    ? selected.map((id) => data.items.find((book) => book.id === id)!)
+    : data.items.slice(0, 3);
 }
 function normalizeData(data: LearningData): LearningData {
   return {
     ...data,
+    homeBookIds: validHomeBookIds(data),
     round: normalizeRound(data.round),
     roundSize: [5, 10, 15, 20].includes(Number(data.roundSize))
       ? Number(data.roundSize)
@@ -372,7 +392,7 @@ export function loadData(storage: StoragePort): {
       }
     }
     const data = initialData();
-    for (const name of Object.keys(legacyKeys) as (keyof LearningData)[]) {
+    for (const name of Object.keys(legacyKeys) as (keyof typeof legacyKeys)[]) {
       storageKey = legacyKeys[name];
       field = name;
       if (raw[name] !== null)
@@ -391,7 +411,7 @@ export function loadData(storage: StoragePort): {
   } catch (error) {
     if (error instanceof DataValidationError) {
       field = error.field;
-      const group = field.split(/[.[]/)[0] as keyof LearningData;
+      const group = field.split(/[.[]/)[0] as keyof typeof legacyKeys;
       if (source === "旧版 English Study 数据")
         storageKey = legacyKeys[group] || storageKey;
     }
@@ -471,6 +491,7 @@ export function importBackup(
     roundSize: value.roundSize ?? data.roundSize,
     dailyGoal: value.dailyGoal ?? data.dailyGoal,
     practiceMode: value.practiceMode ?? data.practiceMode,
+    homeBookIds: value.homeBookIds ?? data.homeBookIds,
   });
 }
 export function units(data: LearningData, source = "all"): Card[] {
@@ -725,7 +746,10 @@ export function resetBook(
   remove = false,
 ): LearningData {
   const next = clone(data);
-  if (remove) next.items = next.items.filter((book) => book.id !== id);
+  if (remove) {
+    next.items = next.items.filter((book) => book.id !== id);
+    next.homeBookIds = validHomeBookIds(next);
+  }
   next.logs = next.logs.filter((log) => log.itemId !== id);
   Object.keys(next.schedule)
     .filter((key) => key.startsWith(id + "::"))

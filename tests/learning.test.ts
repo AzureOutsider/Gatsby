@@ -11,6 +11,7 @@ import {
   finishRound,
   importBackup,
   initialData,
+  homeBooks,
   legacyKeys,
   loadData,
   MIGRATION_KEY,
@@ -48,6 +49,31 @@ function gateData() {
     data = advanceCard(feedback(data, "remembered"));
   return data;
 }
+
+describe("homepage book preferences", () => {
+  it("loads older backups without a preference and preserves a selection in backups", () => {
+    const older = backup(initialData());
+    delete older.homeBookIds;
+    const restored = importBackup(initialData(), older, true);
+    expect(homeBooks(restored).map((book) => book.id)).toEqual(restored.items.slice(0, 3).map((book) => book.id));
+    const data = { ...initialData(), homeBookIds: ["enemy", "shots"] };
+    expect(importBackup(initialData(), backup(data), true).homeBookIds).toEqual(["enemy", "shots"]);
+    expect(importBackup(data, older, false).homeBookIds).toEqual(["enemy", "shots"]);
+  });
+  it("removes deleted books and falls back when the whole selection is gone", () => {
+    let data = { ...initialData(), homeBookIds: ["enemy", "shots"] };
+    data = resetBook(data, "enemy", true) as typeof data;
+    expect(homeBooks(data).map((book) => book.id)).toEqual(["shots"]);
+    data = resetBook(data, "shots", true) as typeof data;
+    expect(homeBooks(data).map((book) => book.id)).toEqual(data.items.slice(0, 3).map((book) => book.id));
+    expect(homeBooks({ ...data, items: [] })).toEqual([]);
+  });
+  it("normalizes stale or duplicate IDs and rejects a malformed preference", () => {
+    const value = backup({ ...initialData(), homeBookIds: ["missing", "shots", "shots", "enemy", "demons", "core"] });
+    expect(importBackup(initialData(), value, true).homeBookIds).toEqual(["shots", "enemy", "demons"]);
+    expect(() => validateBackup({ ...value, homeBookIds: "enemy" })).toThrow(/homeBookIds/);
+  });
+});
 
 describe("existing learning behavior", () => {
   it("keeps all seed books including Viva La Vida", () => {

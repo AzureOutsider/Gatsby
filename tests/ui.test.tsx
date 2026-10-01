@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import App from "../src/App";
 import { LearningProvider } from "../src/store/LearningProvider";
@@ -52,6 +53,90 @@ function mount() {
     </LearningProvider>,
   );
 }
+
+function homeTitles() {
+  return Array.from(
+    document.querySelectorAll(".home-books h3"),
+    (node) => node.textContent,
+  );
+}
+
+it("selects and reorders homepage books, then keeps them after reload", () => {
+  const app = mount();
+  const defaults = initialData().items.slice(0, 3);
+  expect(homeTitles()).toEqual(defaults.map((book) => book.title));
+  fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
+  const dialog = within(screen.getByRole("dialog"));
+  expect(
+    (dialog.getByRole("checkbox", { name: /Shots/ }) as HTMLInputElement)
+      .disabled,
+  ).toBe(true);
+  defaults.forEach((book) => {
+    fireEvent.click(
+      dialog.getByRole("checkbox", { name: new RegExp(book.title) }),
+    );
+  });
+  ["Shots", "Demons", "Enemy"].forEach((title) => {
+    fireEvent.click(dialog.getByRole("checkbox", { name: new RegExp(title) }));
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "上移 Enemy" }));
+  fireEvent.click(dialog.getByRole("button", { name: "保存选择" }));
+  expect(homeTitles()).toEqual(["Shots", "Enemy", "Demons"]);
+  expect(JSON.parse(localStorage.getItem(STATE_KEY)!).homeBookIds).toEqual([
+    "shots",
+    "enemy",
+    "demons",
+  ]);
+  app.unmount();
+  mount();
+  expect(homeTitles()).toEqual(["Shots", "Enemy", "Demons"]);
+  fireEvent.click(screen.getByRole("button", { name: /^Enemy$/ }));
+  expect(
+    (screen.getByRole("combobox", { name: "学习来源" }) as HTMLSelectElement)
+      .value,
+  ).toBe("enemy");
+});
+
+it("cancels homepage edits and only restores defaults after saving", () => {
+  saveHomeSelection();
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+  fireEvent.click(screen.getByRole("button", { name: /^取消$/ }));
+  expect(homeTitles()).toEqual(["Shots"]);
+  fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
+  expect(homeTitles()).toEqual(
+    initialData()
+      .items.slice(0, 3)
+      .map((book) => book.title),
+  );
+});
+
+function saveHomeSelection() {
+  localStorage.setItem(
+    STATE_KEY,
+    JSON.stringify(backup({ ...initialData(), homeBookIds: ["shots"] })),
+  );
+}
+
+it("rejects an empty homepage selection and keeps the dialog open on save failure", () => {
+  saveHomeSelection();
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Shots/ }));
+  fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
+  expect(screen.getByRole("alert").textContent).toContain("请至少选择一本");
+  fireEvent.click(screen.getByRole("checkbox", { name: /Enemy/ }));
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(homeTitles()).toEqual(["Shots"]);
+  expect(screen.getByRole("status").textContent).toContain("保存失败");
+});
 
 it("replacing a backup resets free practice before old cards can write into restored data", async () => {
   mount();

@@ -83,6 +83,7 @@ export interface LearningData {
   roundSize: number;
   dailyGoal: number;
   practiceMode: Mode;
+  homeBookIds?: string[];
 }
 export interface Backup extends LearningData {
   version: number;

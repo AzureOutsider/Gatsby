@@ -28,6 +28,7 @@ const sections: Record<string, string> = {
   roundSize: "每轮数量",
   dailyGoal: "每日目标",
   practiceMode: "练习模式",
+  homeBookIds: "首页展示词书",
   version: "数据版本",
   state: "整体学习数据",
 };

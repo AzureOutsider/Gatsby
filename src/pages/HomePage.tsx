@@ -1,11 +1,14 @@
-import { ArrowRight, Moon, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, Moon, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useLearning } from "../store/LearningProvider";
-import { statistics } from "../store/learning";
+import { homeBooks, statistics } from "../store/learning";
 import { Progress } from "../components/UI";
 import { BookCard } from "../features/library/BookCard";
+import { HomeBookPicker } from "../features/library/HomeBookPicker";
 export function HomePage({ onStart }: { onStart: (source?: string) => void }) {
   const { data, setView } = useLearning(),
     stats = statistics(data);
+  const [pickingBooks, setPickingBooks] = useState(false);
   return (
     <>
       <div className="home-greeting">
@@ -116,13 +119,22 @@ export function HomePage({ onStart }: { onStart: (source?: string) => void }) {
           <h2>下一段，读什么</h2>
           <p>音乐、文字与对白，都是英语的入口。</p>
         </div>
-        <button className="text-btn" onClick={() => setView("library")}>
-          浏览内容库 <ArrowRight size={17} />
-        </button>
+        <div className="home-book-actions">
+          <button
+            className="quiet-btn"
+            disabled={!data.items.length}
+            onClick={() => setPickingBooks(true)}
+          >
+            <SlidersHorizontal size={17} aria-hidden="true" /> 选择展示词书
+          </button>
+          <button className="text-btn" onClick={() => setView("library")}>
+            浏览内容库 <ArrowRight size={17} />
+          </button>
+        </div>
       </div>
       {data.items.length ? (
         <div className="home-books">
-          {data.items.slice(0, 3).map((book) => (
+          {homeBooks(data).map((book) => (
             <BookCard key={book.id} book={book} onStart={onStart} />
           ))}
         </div>
@@ -133,6 +145,9 @@ export function HomePage({ onStart }: { onStart: (source?: string) => void }) {
             打开内容库
           </button>
         </div>
+      )}
+      {pickingBooks && (
+        <HomeBookPicker onClose={() => setPickingBooks(false)} />
       )}
     </>
   );
