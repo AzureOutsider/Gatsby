@@ -30,6 +30,28 @@ export function resolveVoice(choice: VoiceChoice, voices = englishVoices()) {
     (voice) => voiceKey(voiceChoice(voice)) === voiceKey(choice),
   );
 }
+// Reading getVoices() initiates asynchronous enumeration in supporting browsers.
+// This prepares voice metadata only; it never speaks or downloads audio.
+export function prepareVoices(settings: PronunciationSettings): () => void {
+  if (!supportedSpeech()) return () => {};
+  const synth = window.speechSynthesis;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  function dispose() {
+    clearTimeout(timer);
+    synth.removeEventListener("voiceschanged", refresh);
+  }
+  function refresh() {
+    const voices = englishVoices();
+    const mainReady = !settings.voice || !!resolveVoice(settings.voice, voices);
+    const backupReady =
+      !settings.backupVoice || !!resolveVoice(settings.backupVoice, voices);
+    if (voices.length && mainReady && backupReady) dispose();
+  }
+  synth.addEventListener("voiceschanged", refresh);
+  timer = setTimeout(dispose, 3000);
+  refresh();
+  return dispose;
+}
 export function voiceLabel(voice: VoiceChoice): string {
   const lang = voice.lang.replace("_", "-");
   const accent = /^en-US$/i.test(lang)

@@ -100,7 +100,9 @@ export function Sound({ text }: { text: string }) {
         {phase === "failed"
           ? audio.message
           : phase === "preparing"
-            ? "正在准备声音…"
+            ? audio.backup
+              ? "正在准备备用声音…"
+              : "正在准备声音…"
             : phase === "playing"
               ? `${audio.backup ? "备用声音：" : ""}${audio.voice}`
               : active && audio.backup

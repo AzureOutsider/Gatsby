@@ -20,6 +20,7 @@ import {
   defaultPronunciation,
   voiceChoice,
   voiceKey,
+  prepareVoices,
 } from "../src/features/flashcards/voices";
 import {
   backup,
@@ -171,42 +172,144 @@ describe("fixed voice playback", () => {
     playWord("word", defaultPronunciation, "card");
     expect(audioSnapshot().message).toContain("选择主声音");
     voices = [local];
-    playWord("word", settings, "card");
+    playWord("word", { ...settings, backupVoice: null }, "card");
     expect(audioSnapshot().message).toContain("当前浏览器不可用");
     expect(synth.speak).not.toHaveBeenCalled();
     voices = [];
     playWord("word", settings, "card");
-    vi.advanceTimersByTime(3000);
+    vi.advanceTimersByTime(4000);
     expect(audioSnapshot().phase).toBe("failed");
     vi.stubGlobal("speechSynthesis", undefined);
     playWord("word", settings, "card");
     expect(audioSnapshot().message).toContain("不支持");
   });
-  it("reports network and start timeout failures, using backup only when explicitly requested", () => {
+  it("automatically falls back once on network failure and returns to the primary on the next click", () => {
     playWord("word", settings, "card");
     vi.advanceTimersByTime(0);
     latest().onerror?.({ error: "network" });
-    expect(audioSnapshot().message).toContain("连接失败");
+    expect(audioSnapshot().backup).toBe(true);
     expect(synth.speak).toHaveBeenCalledTimes(1);
-    playWord("word", settings, "card", true);
     vi.advanceTimersByTime(0);
     expect(latest().voice).toBe(local);
     expect(audioSnapshot().backup).toBe(true);
     latest().onstart?.();
     latest().onend?.();
     playWord("word", settings, "card");
-    vi.advanceTimersByTime(10000);
+    vi.advanceTimersByTime(0);
     expect(latest().voice).toBe(online);
-    expect(audioSnapshot().message).toContain("超过 10 秒");
+  });
+  it("switches at 2 seconds from the click, cancels late primary events, and fails after backup also times out", () => {
+    playWord("word", settings, "card");
+    vi.advanceTimersByTime(0);
+    const primary = latest();
+    vi.advanceTimersByTime(1999);
+    expect(audioSnapshot().backup).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(audioSnapshot().backup).toBe(true);
+    primary.onstart?.();
+    primary.onerror?.({ error: "network" });
+    primary.onend?.();
+    expect(audioSnapshot().phase).toBe("preparing");
+    vi.advanceTimersByTime(1);
+    expect(latest().voice).toBe(local);
+    vi.advanceTimersByTime(1999);
+    expect(audioSnapshot().phase).toBe("failed");
+    expect(audioSnapshot().message).toContain("备用声音也失败");
+    expect(synth.speak).toHaveBeenCalledTimes(2);
     latest().onstart?.();
     expect(audioSnapshot().phase).toBe("failed");
+  });
+  it("cancels without fallback and does not loop when backup is absent or identical", () => {
+    for (const reason of ["canceled", "interrupted"]) {
+      playWord("word", settings, "card");
+      vi.advanceTimersByTime(0);
+      const count = synth.speak.mock.calls.length;
+      latest().onerror?.({ error: reason });
+      vi.advanceTimersByTime(5000);
+      expect(synth.speak).toHaveBeenCalledTimes(count);
+    }
+    for (const backupVoice of [null, settings.voice]) {
+      playWord("word", { ...settings, backupVoice }, "card");
+      vi.advanceTimersByTime(0);
+      const count = synth.speak.mock.calls.length;
+      latest().onerror?.({ error: "network" });
+      vi.advanceTimersByTime(5000);
+      expect(synth.speak).toHaveBeenCalledTimes(count);
+      expect(audioSnapshot().backup).toBe(false);
+    }
+    playWord("word", settings, "card");
+    stopAudio();
+    vi.advanceTimersByTime(5000);
+    expect(audioSnapshot().phase).toBe("idle");
+  });
+  it("includes delayed enumeration in the 2-second budget and clears the timeout once playback starts", () => {
+    voices = [];
+    playWord("word", settings, "card");
+    vi.advanceTimersByTime(1500);
+    voices = [online, local];
+    synth.dispatchEvent(new Event("voiceschanged"));
+    vi.advanceTimersByTime(0);
+    expect(latest().voice).toBe(online);
+    vi.advanceTimersByTime(500);
+    expect(audioSnapshot().backup).toBe(true);
+    vi.advanceTimersByTime(1);
+    latest().onstart?.();
+    vi.advanceTimersByTime(10000);
+    expect(audioSnapshot().phase).toBe("playing");
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+  });
+  it("reports both source failures without retrying a third source", () => {
+    playWord("word", settings, "card");
+    vi.advanceTimersByTime(0);
+    latest().onerror?.({ error: "network" });
+    vi.advanceTimersByTime(0);
+    latest().onerror?.({ error: "voice-unavailable" });
+    vi.advanceTimersByTime(5000);
+    expect(audioSnapshot().message).toContain("主声音失败");
+    expect(audioSnapshot().message).toContain("备用声音也失败");
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+  });
+  it("prepares voice metadata in the background without speech, fetches or playback state changes", () => {
+    voices = [];
+    const dispose = prepareVoices(settings);
+    const before = synth.getVoices.mock.calls.length;
+    voices = [online, local];
+    synth.dispatchEvent(new Event("voiceschanged"));
+    expect(synth.getVoices.mock.calls.length).toBeGreaterThan(before);
+    const after = synth.getVoices.mock.calls.length;
+    synth.dispatchEvent(new Event("voiceschanged"));
+    expect(synth.getVoices).toHaveBeenCalledTimes(after);
+    expect(synth.speak).not.toHaveBeenCalled();
+    expect(synth.cancel).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(audioSnapshot().phase).toBe("idle");
+    dispose();
+    voices = [];
+    const cancelPreparation = prepareVoices(settings);
+    cancelPreparation();
+    const finalCount = synth.getVoices.mock.calls.length;
+    synth.dispatchEvent(new Event("voiceschanged"));
+    expect(synth.getVoices).toHaveBeenCalledTimes(finalCount);
+  });
+  it("immediately tries backup if the primary is unavailable, but keeps audition on its selected source", () => {
+    voices = [local];
+    playWord("word", settings, "card");
+    vi.advanceTimersByTime(0);
+    expect(latest().voice).toBe(local);
+    expect(audioSnapshot().backup).toBe(true);
+    const count = synth.speak.mock.calls.length;
+    playWord("word", settings, "audition", false, false);
+    vi.advanceTimersByTime(0);
+    expect(audioSnapshot().phase).toBe("failed");
+    expect(audioSnapshot().backup).toBe(false);
+    expect(synth.speak).toHaveBeenCalledTimes(count);
   });
   it("turns synchronous engine failures into an actionable error", () => {
     synth.speak.mockImplementation(() => {
       throw new Error("engine");
     });
     playWord("word", settings, "card");
-    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(1);
     expect(audioSnapshot().message).toContain("无法启动");
   });
 });
@@ -219,6 +322,16 @@ describe("pronunciation data and UI", () => {
       </LearningProvider>,
     );
   }
+  it("prepares voices on app startup and card display without speaking", () => {
+    mount();
+    expect(synth.getVoices).toHaveBeenCalled();
+    const before = synth.getVoices.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "开始今天的学习" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始这一轮 Enter" }));
+    expect(synth.getVoices.mock.calls.length).toBeGreaterThan(before);
+    expect(synth.speak).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
   it("preserves choices in reloads and backups, accepts older backups and rejects invalid settings", () => {
     const data = { ...initialData(), pronunciation: settings };
     localStorage.setItem(STATE_KEY, JSON.stringify(backup(data)));
@@ -320,7 +433,7 @@ describe("pronunciation data and UI", () => {
       voiceKey(voiceChoice(online)),
     );
   });
-  it("displays playback phases and offers explicit backup, stopping when advancing or navigating", () => {
+  it("displays automatic backup playback and stops when advancing or navigating", () => {
     localStorage.setItem(
       STATE_KEY,
       JSON.stringify(backup({ ...initialData(), pronunciation: settings })),
@@ -338,14 +451,12 @@ describe("pronunciation data and UI", () => {
       screen.getByRole("button", { name: /的发音 · 播放中/ }),
     ).toBeTruthy();
     act(() => latest().onerror?.({ error: "network" }));
-    expect(
-      screen.getByRole("button", { name: /的发音 · 播放失败/ }),
-    ).toBeTruthy();
+    expect(screen.getByText("正在准备备用声音…")).toBeTruthy();
     expect(synth.speak).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "使用备用声音播放" }));
-    act(() => vi.advanceTimersByTime(0));
+    act(() => vi.advanceTimersByTime(1));
     expect(latest().voice).toBe(local);
     act(() => latest().onstart?.());
+    expect(screen.getByText(/备用声音：Local US/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /记得 2/ }));
     expect(audioSnapshot().phase).toBe("playing");
     fireEvent.click(screen.getByRole("button", { name: /下一个 Enter/ }));

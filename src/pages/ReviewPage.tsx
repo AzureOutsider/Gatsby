@@ -20,6 +20,10 @@ import { Spelling } from "../features/spelling/Spelling";
 import { RoundSetup } from "../features/learning-round/RoundSetup";
 import { RoundHistory } from "../features/learning-round/RoundHistory";
 import { stopAudio } from "../features/flashcards/audio";
+import {
+  defaultPronunciation,
+  prepareVoices,
+} from "../features/flashcards/voices";
 export function ReviewPage({ source }: { source: string }) {
   const { data, update, setView, notify } = useLearning(),
     round = data.round;
@@ -30,6 +34,11 @@ export function ReviewPage({ source }: { source: string }) {
       ? round.spellingQueue[round.spellingIndex]
       : round.cardQueue[round.cardIndex]
     : free?.queue[free.index];
+  const pronunciationKey = JSON.stringify(data.pronunciation);
+  useEffect(
+    () => prepareVoices(data.pronunciation || defaultPronunciation),
+    [card?.prompt, card?.itemId, pronunciationKey],
+  );
   useEffect(() => {
     stopAudio();
     return stopAudio;

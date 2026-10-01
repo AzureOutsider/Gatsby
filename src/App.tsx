@@ -22,6 +22,10 @@ import { DataTools } from "./features/statistics/DataTools";
 import { Modal } from "./components/UI";
 import { PronunciationSettings } from "./features/flashcards/PronunciationSettings";
 import { stopAudio } from "./features/flashcards/audio";
+import {
+  defaultPronunciation,
+  prepareVoices,
+} from "./features/flashcards/voices";
 
 const navigation = [
   { id: "home", label: "今日学习", icon: House },
@@ -37,6 +41,10 @@ export default function App() {
       "shortcuts" | "data" | "logo" | "pronunciation" | null
     >(null);
   const pronunciationKey = JSON.stringify(data.pronunciation);
+  useEffect(
+    () => prepareVoices(data.pronunciation || defaultPronunciation),
+    [pronunciationKey],
+  );
   useEffect(() => {
     stopAudio();
   }, [view, modal, sessionRevision, pronunciationKey]);

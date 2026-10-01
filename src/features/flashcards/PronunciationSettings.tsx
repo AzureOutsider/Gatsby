@@ -160,7 +160,8 @@ export function PronunciationSettings({ onClose }: { onClose: () => void }) {
           </select>
         </label>
         <p className="form-help">
-          主声音失败时，会提供“使用备用声音播放”。只有主动点击才切换，下一次正常播放仍使用主声音。
+          主声音出错或 2
+          秒内未启动时，自动尝试备用声音，并标明播放来源。下一次正常播放仍先尝试主声音。建议选择与主声音不同的备用声音。
         </p>
         <label>
           语速
@@ -234,7 +235,9 @@ export function PronunciationSettings({ onClose }: { onClose: () => void }) {
                 !(backup ? draft.backupVoice : draft.voice) ||
                 !supported
               }
-              onClick={() => playWord(sample.trim(), draft, owner, backup)}
+              onClick={() =>
+                playWord(sample.trim(), draft, owner, backup, false)
+              }
             >
               <Volume2 size={18} aria-hidden="true" />
               {active && audio.phase === "preparing"
