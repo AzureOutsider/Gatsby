@@ -54,6 +54,247 @@ function mount() {
   );
 }
 
+function openImporter() {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "内容库" }));
+  fireEvent.click(screen.getByRole("button", { name: "导入内容" }));
+  return within(screen.getByRole("dialog"));
+}
+
+it("previews every parsed entry and blocks duplicate imports until the original line is corrected", async () => {
+  const dialog = openImporter();
+  fireEvent.change(dialog.getByRole("textbox", { name: "标题" }), {
+    target: { value: "Preview words" },
+  });
+  const editor = dialog.getByRole("textbox", {
+    name: "学习单元",
+  }) as HTMLTextAreaElement;
+  fireEvent.change(editor, {
+    target: { value: "linger | 逗留 | The melody lingered.\nLINGER | 停留" },
+  });
+  const preview = within(dialog.getByRole("region", { name: "导入预览" }));
+  expect(preview.getByRole("status").textContent).toContain("1 个错误");
+  fireEvent.click(preview.getByRole("button", { name: "第 2 行" }));
+  expect(document.activeElement).toBe(editor);
+  expect(editor.value.slice(editor.selectionStart, editor.selectionEnd)).toBe(
+    "LINGER | 停留",
+  );
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(dialog.getByRole("alert").textContent).toContain("发现 1 个错误");
+  expect(
+    JSON.parse(localStorage.getItem(STATE_KEY) || '{"items":[]}').items.some(
+      (book: { title: string }) => book.title === "Preview words",
+    ),
+  ).toBe(false);
+  fireEvent.change(editor, {
+    target: { value: "linger | 逗留 | The melody lingered.\nretain | 保留" },
+  });
+  expect(preview.getByRole("status").textContent).toContain("已识别 2 个单元");
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  const book = JSON.parse(localStorage.getItem(STATE_KEY)!).items.find(
+    (book: { title: string }) => book.title === "Preview words",
+  );
+  expect(book.units.map((unit: { prompt: string }) => unit.prompt)).toEqual([
+    "linger",
+    "retain",
+  ]);
+});
+
+it("requires explicit warning acknowledgement and resets it when the content changes", () => {
+  const dialog = openImporter();
+  fireEvent.change(dialog.getByRole("textbox", { name: "标题" }), {
+    target: { value: "Draft" },
+  });
+  const editor = dialog.getByRole("textbox", { name: "学习单元" });
+  fireEvent.change(editor, { target: { value: "linger" } });
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(dialog.getByRole("alert").textContent).toContain("确认警告");
+  fireEvent.click(dialog.getByRole("checkbox", { name: /我已核对预览/ }));
+  fireEvent.change(editor, { target: { value: "retain" } });
+  expect(
+    (dialog.getByRole("checkbox", { name: /我已核对预览/ }) as HTMLInputElement)
+      .checked,
+  ).toBe(false);
+  fireEvent.click(dialog.getByRole("checkbox", { name: /我已核对预览/ }));
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  const book = JSON.parse(localStorage.getItem(STATE_KEY)!).items.find(
+    (book: { title: string }) => book.title === "Draft",
+  );
+  expect(book.units[0].answer).toBe("待补充释义");
+});
+
+it("paginates previews without losing entries and preserves the draft when saving fails", () => {
+  const dialog = openImporter();
+  fireEvent.change(dialog.getByRole("textbox", { name: "标题" }), {
+    target: { value: "Many words" },
+  });
+  const editor = dialog.getByRole("textbox", {
+    name: "学习单元",
+  }) as HTMLTextAreaElement;
+  const raw = Array.from(
+    { length: 12 },
+    (_, index) => `word${index} | 词条${index}`,
+  ).join("\n");
+  fireEvent.change(editor, { target: { value: raw } });
+  const preview = within(dialog.getByRole("region", { name: "导入预览" }));
+  expect(preview.getAllByRole("listitem")).toHaveLength(10);
+  fireEvent.click(preview.getByRole("button", { name: "下一页预览" }));
+  expect(preview.getAllByRole("listitem")).toHaveLength(2);
+  expect(preview.getByText("word11")).toBeTruthy();
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("quota", "QuotaExceededError");
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(dialog.getByRole("alert").textContent).toContain("保存失败");
+  expect(editor.value).toBe(raw);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});
+
+it("reads UTF-8 CSV and blocks stale preview imports after an invalid file", async () => {
+  const dialog = openImporter();
+  const fileInput = dialog.getByLabelText("从文件读取");
+  const text = 'word,meaning,example\n"dear","亲爱的","Hello, dear!"';
+  fireEvent.change(fileInput, {
+    target: {
+      files: [
+        {
+          name: "Words.csv",
+          size: text.length,
+          arrayBuffer: async () => new TextEncoder().encode(text).buffer,
+        },
+      ],
+    },
+  });
+  await waitFor(() =>
+    expect(
+      (dialog.getByRole("textbox", { name: "标题" }) as HTMLInputElement).value,
+    ).toBe("Words"),
+  );
+  expect(dialog.getByText("例句：Hello, dear!")).toBeTruthy();
+  expect(
+    (dialog.getByRole("combobox", { name: "解析格式" }) as HTMLSelectElement)
+      .value,
+  ).toBe("csv");
+  fireEvent.change(fileInput, {
+    target: {
+      files: [
+        {
+          name: "bad.csv",
+          size: 1,
+          arrayBuffer: async () => new Uint8Array([255]).buffer,
+        },
+      ],
+    },
+  });
+  await waitFor(() =>
+    expect(dialog.getByRole("alert").textContent).toContain("UTF-8"),
+  );
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(dialog.getByRole("alert").textContent).toContain("原有输入仍保留");
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  fireEvent.change(dialog.getByRole("textbox", { name: "学习单元" }), {
+    target: { value: 'dear,亲爱的,"Hello, dear!"' },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "建立学习卡片" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("rejects unsupported, oversized, empty and unreadable files while retaining typed content", async () => {
+  const dialog = openImporter();
+  const editor = dialog.getByRole("textbox", {
+    name: "学习单元",
+  }) as HTMLTextAreaElement;
+  fireEvent.change(editor, { target: { value: "keep | 保留" } });
+  const cases = [
+    {
+      name: "book.pdf",
+      size: 1,
+      arrayBuffer: async () => new ArrayBuffer(0),
+      message: "不支持",
+    },
+    {
+      name: "large.txt",
+      size: 5 * 1024 * 1024 + 1,
+      arrayBuffer: async () => new ArrayBuffer(0),
+      message: "5 MB",
+    },
+    {
+      name: "empty.txt",
+      size: 0,
+      arrayBuffer: async () => new ArrayBuffer(0),
+      message: "文件为空",
+    },
+    {
+      name: "unreadable.txt",
+      size: 1,
+      arrayBuffer: async () => {
+        throw new TypeError("unreadable");
+      },
+      message: "读取文件失败",
+    },
+  ];
+  for (const file of cases) {
+    fireEvent.change(dialog.getByLabelText("从文件读取"), {
+      target: { files: [file] },
+    });
+    await waitFor(() =>
+      expect(dialog.getByRole("alert").textContent).toContain(file.message),
+    );
+    expect(editor.value).toBe("keep | 保留");
+  }
+});
+
+it("keeps the latest file selection when an older read completes later", async () => {
+  const dialog = openImporter();
+  let resolveOld!: (value: ArrayBuffer) => void;
+  const older = new Promise<ArrayBuffer>((resolve) => {
+    resolveOld = resolve;
+  });
+  fireEvent.change(dialog.getByLabelText("从文件读取"), {
+    target: { files: [{ name: "old.txt", size: 5, arrayBuffer: () => older }] },
+  });
+  fireEvent.change(dialog.getByLabelText("从文件读取"), {
+    target: {
+      files: [
+        {
+          name: "new.txt",
+          size: 5,
+          arrayBuffer: async () =>
+            new TextEncoder().encode("new | 新的").buffer,
+        },
+      ],
+    },
+  });
+  await waitFor(() => expect(dialog.getByText(/已读取：new.txt/)).toBeTruthy());
+  resolveOld(new TextEncoder().encode("old | 旧的").buffer);
+  await older;
+  await waitFor(() =>
+    expect(
+      (dialog.getByRole("textbox", { name: "学习单元" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("new | 新的"),
+  );
+  expect(
+    (dialog.getByRole("textbox", { name: "标题" }) as HTMLInputElement).value,
+  ).toBe("new");
+});
+
+it("leaves existing contents intact when an edit contains errors", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "内容库" }));
+  fireEvent.click(screen.getByRole("button", { name: "编辑 Duvet" }));
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.change(dialog.getByRole("textbox", { name: "学习单元" }), {
+    target: { value: "word | 单词\nword | 字词" },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "保存修改" }));
+  expect(dialog.getByRole("alert").textContent).toContain("发现 1 个错误");
+  fireEvent.click(dialog.getByRole("button", { name: "取消" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(localStorage.getItem(STATE_KEY)).toBeNull();
+});
+
 function homeTitles() {
   return Array.from(
     document.querySelectorAll(".home-books h3"),

@@ -1515,6 +1515,101 @@ button kbd {
   font-size: var(--text-meta);
   color: #f0aab9;
 }
+.import-preview {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--night);
+}
+.import-preview h3 {
+  font-size: 22px;
+}
+.import-issues {
+  font-size: var(--text-meta);
+  display: grid;
+  gap: 10px;
+}
+.import-issues ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.import-issues li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.import-issues li .text-btn {
+  flex-shrink: 0;
+}
+.import-issues li span {
+  overflow-wrap: anywhere;
+}
+.import-warning {
+  color: var(--gold);
+}
+.import-cards {
+  padding-left: 28px;
+  margin: 0;
+}
+.import-cards li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.import-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.import-card-heading strong {
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.import-cards p {
+  margin-top: 8px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: var(--text-body);
+}
+.preview-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-sm);
+}
+.import-acknowledgement {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.import-acknowledgement input {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--gold);
+  margin-top: 4px;
+}
+.import-error-summary {
+  padding: 15px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+}
+.import-error-summary:focus {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
 .file-field {
   display: flex;
   align-items: center;
