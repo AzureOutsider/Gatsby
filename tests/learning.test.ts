@@ -199,10 +199,12 @@ describe("migration and persistence", () => {
       title: "My private notes",
       units: [data.items[0].units[0]],
     };
+    data.items = data.items.filter((book) => book.id !== "reading");
     data.items.push(privateBook);
     saveData(storage, data);
     storage.setItem(SEED_CATALOG_MIGRATION_KEY, JSON.stringify(["core"]));
     const loaded = loadData(storage).data;
+    expect(loaded.items.some((book) => book.id === "reading")).toBe(true);
     expect(loaded.items.find((book) => book.id === "private-import")).toEqual(
       privateBook,
     );

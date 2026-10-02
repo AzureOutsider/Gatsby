@@ -15,13 +15,9 @@ try {
   }
   & $buildPython -m pip install --requirement (Join-Path $projectRoot "requirements-build.txt")
   if ($LASTEXITCODE -ne 0) { throw "Build dependencies installation failed" }
-  $pythonLicense = & $buildPython -c 'from pathlib import Path; import sys; print(Path(sys.base_prefix) / "LICENSE.txt")'
-  $packagerLicense = & $buildPython -c 'from importlib.metadata import distribution; d = distribution("pyinstaller"); print(next(d.locate_file(p) for p in d.files if p.name == "COPYING.txt"))'
-  if ($LASTEXITCODE -ne 0) { throw "Could not locate packaging license" }
+  & $buildPython (Join-Path $projectRoot "scripts\prepare_build_notices.py")
+  if ($LASTEXITCODE -ne 0) { throw "Could not prepare packaging licenses" }
   $notices = Join-Path $projectRoot ".venv-build\notices"
-  New-Item -ItemType Directory -Path $notices -Force | Out-Null
-  Copy-Item -LiteralPath $pythonLicense -Destination (Join-Path $notices "PYTHON-LICENSE.txt") -Force
-  Copy-Item -LiteralPath $packagerLicense -Destination (Join-Path $notices "PYINSTALLER-LICENSE.txt") -Force
   & $buildPython -m PyInstaller --noconfirm --clean --onefile --name Gatsby --icon "$projectRoot\public\gatsby.ico" --add-data "$projectRoot\web-dist;web-dist" --add-data "$projectRoot\LICENSE;." --add-data "$projectRoot\NOTICE.md;." --add-data "$notices;licenses" "$projectRoot\server.py"
   if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
   $distributionNotices = Join-Path $projectRoot "dist\licenses"
