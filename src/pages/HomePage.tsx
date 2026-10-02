@@ -26,8 +26,8 @@ export function HomePage({ onStart }: { onStart: (source?: string) => void }) {
       <div className="home-hero-grid">
         <section className="home-hero">
           <img
-            src="./gatsby-scene.webp"
-            alt="暖金灯光下的钢琴、酒杯与晚宴剪影"
+            src="./gatsby-scene.svg"
+            alt="原创图形：夜色里的书页、窗光与星点"
             className="hero-art"
           />
           <div className="hero-shade" />

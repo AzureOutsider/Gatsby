@@ -158,8 +158,7 @@ const seed = [
       }
     ]
   }
-];
-const state = {
+];const state = {
   items: load("library", seed),
   logs: load("logs", []),
   schedule: loadObject(SCHEDULE_KEY, {}),

@@ -278,7 +278,9 @@ it("keeps the latest file selection when an older read completes later", async (
 it("leaves existing contents intact when an edit contains errors", () => {
   mount();
   fireEvent.click(screen.getByRole("button", { name: "内容库" }));
-  fireEvent.click(screen.getByRole("button", { name: "编辑 Duvet" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "编辑 Reading Practice" }),
+  );
   const dialog = within(screen.getByRole("dialog"));
   fireEvent.change(dialog.getByRole("textbox", { name: "学习单元" }), {
     target: { value: "word | 单词\nword | 字词" },
@@ -304,33 +306,52 @@ it("selects and reorders homepage books, then keeps them after reload", () => {
   fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
   const dialog = within(screen.getByRole("dialog"));
   expect(
-    (dialog.getByRole("checkbox", { name: /Shots/ }) as HTMLInputElement)
-      .disabled,
+    (
+      dialog.getByRole("checkbox", {
+        name: /Phrases in Practice/,
+      }) as HTMLInputElement
+    ).disabled,
   ).toBe(true);
   defaults.forEach((book) => {
     fireEvent.click(
       dialog.getByRole("checkbox", { name: new RegExp(book.title) }),
     );
   });
-  ["Shots", "Demons", "Enemy"].forEach((title) => {
-    fireEvent.click(dialog.getByRole("checkbox", { name: new RegExp(title) }));
-  });
-  fireEvent.click(dialog.getByRole("button", { name: "上移 Enemy" }));
+  ["Phrases in Practice", "Reading Practice", "Everyday Conversation"].forEach(
+    (title) => {
+      fireEvent.click(
+        dialog.getByRole("checkbox", { name: new RegExp(title) }),
+      );
+    },
+  );
+  fireEvent.click(
+    dialog.getByRole("button", { name: "上移 Everyday Conversation" }),
+  );
   fireEvent.click(dialog.getByRole("button", { name: "保存选择" }));
-  expect(homeTitles()).toEqual(["Shots", "Enemy", "Demons"]);
+  expect(homeTitles()).toEqual([
+    "Phrases in Practice",
+    "Everyday Conversation",
+    "Reading Practice",
+  ]);
   expect(JSON.parse(localStorage.getItem(STATE_KEY)!).homeBookIds).toEqual([
-    "shots",
-    "enemy",
-    "demons",
+    "phrases",
+    "conversation",
+    "reading",
   ]);
   app.unmount();
   mount();
-  expect(homeTitles()).toEqual(["Shots", "Enemy", "Demons"]);
-  fireEvent.click(screen.getByRole("button", { name: /^Enemy$/ }));
+  expect(homeTitles()).toEqual([
+    "Phrases in Practice",
+    "Everyday Conversation",
+    "Reading Practice",
+  ]);
+  fireEvent.click(
+    screen.getByRole("button", { name: /^Everyday Conversation$/ }),
+  );
   expect(
     (screen.getByRole("combobox", { name: "学习来源" }) as HTMLSelectElement)
       .value,
-  ).toBe("enemy");
+  ).toBe("conversation");
 });
 
 it("cancels homepage edits and only restores defaults after saving", () => {
@@ -339,7 +360,7 @@ it("cancels homepage edits and only restores defaults after saving", () => {
   fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
   fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
   fireEvent.click(screen.getByRole("button", { name: /^取消$/ }));
-  expect(homeTitles()).toEqual(["Shots"]);
+  expect(homeTitles()).toEqual(["Phrases in Practice"]);
   fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
   fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
   fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
@@ -353,7 +374,7 @@ it("cancels homepage edits and only restores defaults after saving", () => {
 function saveHomeSelection() {
   localStorage.setItem(
     STATE_KEY,
-    JSON.stringify(backup({ ...initialData(), homeBookIds: ["shots"] })),
+    JSON.stringify(backup({ ...initialData(), homeBookIds: ["phrases"] })),
   );
 }
 
@@ -361,16 +382,20 @@ it("rejects an empty homepage selection and keeps the dialog open on save failur
   saveHomeSelection();
   mount();
   fireEvent.click(screen.getByRole("button", { name: "选择展示词书" }));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Shots/ }));
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: /Phrases in Practice/ }),
+  );
   fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
   expect(screen.getByRole("alert").textContent).toContain("请至少选择一本");
-  fireEvent.click(screen.getByRole("checkbox", { name: /Enemy/ }));
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: /Everyday Conversation/ }),
+  );
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
     throw new Error("quota");
   });
   fireEvent.click(screen.getByRole("button", { name: "保存选择" }));
   expect(screen.getByRole("dialog")).toBeTruthy();
-  expect(homeTitles()).toEqual(["Shots"]);
+  expect(homeTitles()).toEqual(["Phrases in Practice"]);
   expect(screen.getByRole("status").textContent).toContain("保存失败");
 });
 

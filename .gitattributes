@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.ico -text
+*.webp -text
+*.png -text
+*.woff2 -text

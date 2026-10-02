@@ -232,7 +232,7 @@ export function BookEditor({
                   : undefined
               }
               required
-              placeholder="例如：Viva La Vida"
+              placeholder="例如：我的阅读笔记"
             />
           </label>
           <label>

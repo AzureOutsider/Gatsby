@@ -165,7 +165,7 @@ export default function App() {
               onClick={() => setModal("logo")}
             >
               <img
-                src="./gatsby-logo.webp"
+                src="./gatsby-logo.svg"
                 alt="Gatsby"
                 width="54"
                 height="54"
@@ -273,8 +273,8 @@ export default function App() {
         <Modal title="Gatsby" onClose={() => setModal(null)}>
           <img
             className="logo-preview"
-            src="./gatsby-scene.webp"
-            alt="Gatsby Logo：暖光下的晚宴与钢琴"
+            src="./gatsby-scene.svg"
+            alt="Gatsby 原创图形：夜色里的书页与窗光"
           />
           <p className="modal-copy">你的英语学习室。夜色留白，词句生光。</p>
         </Modal>

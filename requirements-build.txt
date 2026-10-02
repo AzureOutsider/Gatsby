@@ -1,0 +1,2 @@
+# Windows EXE packaging only; the local server uses the Python standard library.
+pyinstaller==6.16.0

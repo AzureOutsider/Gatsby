@@ -1,0 +1,39 @@
+{
+  "id": "core",
+  "title": "Core Vocabulary",
+  "type": "单词书",
+  "author": "Gatsby · 原创示例",
+  "level": "入门",
+  "progress": 0,
+  "description": "常用单词与原创例句，适合尝试翻卡和拼写。",
+  "units": [
+    {
+      "kind": "词汇",
+      "prompt": "accurate",
+      "answer": "准确的",
+      "context": "An accurate map helps us find the new library.",
+      "note": ""
+    },
+    {
+      "kind": "词汇",
+      "prompt": "context",
+      "answer": "上下文；语境",
+      "context": "Read the whole paragraph to understand the context.",
+      "note": ""
+    },
+    {
+      "kind": "词汇",
+      "prompt": "hesitate",
+      "answer": "犹豫；迟疑",
+      "context": "Please do not hesitate to ask a question.",
+      "note": "hesitate to do = 犹豫做某事。"
+    },
+    {
+      "kind": "词汇",
+      "prompt": "retain",
+      "answer": "保留；记住",
+      "context": "Short reviews help me retain useful expressions.",
+      "note": ""
+    }
+  ]
+}

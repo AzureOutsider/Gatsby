@@ -1,0 +1,39 @@
+{
+  "id": "reading",
+  "title": "Reading Practice",
+  "type": "文章",
+  "author": "Gatsby · 原创示例",
+  "level": "入门",
+  "progress": 0,
+  "description": "用原创短句练习阅读，在语境中理解表达。",
+  "units": [
+    {
+      "kind": "词汇",
+      "prompt": "notice",
+      "answer": "注意到",
+      "context": "I noticed a small library near the station.",
+      "note": "notice 后可直接接名词。"
+    },
+    {
+      "kind": "词汇",
+      "prompt": "quiet",
+      "answer": "安静的",
+      "context": "The reading room is quiet in the morning.",
+      "note": ""
+    },
+    {
+      "kind": "词汇",
+      "prompt": "chapter",
+      "answer": "章节",
+      "context": "We read one chapter before breakfast.",
+      "note": ""
+    },
+    {
+      "kind": "词汇",
+      "prompt": "curious",
+      "answer": "好奇的",
+      "context": "The new student is curious about every story.",
+      "note": "be curious about = 对……好奇。"
+    }
+  ]
+}

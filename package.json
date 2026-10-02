@@ -10,7 +10,8 @@
     "check-books": "node scripts/sync-books.mjs --check",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run && node --test tests/app-state.test.cjs",
-    "check-contrast": "node scripts/check-contrast.mjs"
+    "check-contrast": "node scripts/check-contrast.mjs",
+    "check-public": "node scripts/check-public.mjs"
   },
   "dependencies": {
     "@fontsource-variable/nunito": "^5.2.0",
@@ -30,5 +31,9 @@
     "typescript": "^5.7.0",
     "vite": "^6.4.0",
     "vitest": "^4.1.11"
-  }
+  },
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "license": "MIT"
 }

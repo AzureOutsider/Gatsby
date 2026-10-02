@@ -20,10 +20,7 @@ import {
   resetBook,
   saveBook,
   saveData,
-  DEMONS_SEED_MIGRATION_KEY,
-  ENEMY_SEED_MIGRATION_KEY,
   SEED_CATALOG_MIGRATION_KEY,
-  SHOTS_SEED_MIGRATION_KEY,
   STATE_KEY,
   statistics,
   validateBackup,
@@ -55,35 +52,62 @@ describe("homepage book preferences", () => {
     const older = backup(initialData());
     delete older.homeBookIds;
     const restored = importBackup(initialData(), older, true);
-    expect(homeBooks(restored).map((book) => book.id)).toEqual(restored.items.slice(0, 3).map((book) => book.id));
-    const data = { ...initialData(), homeBookIds: ["enemy", "shots"] };
-    expect(importBackup(initialData(), backup(data), true).homeBookIds).toEqual(["enemy", "shots"]);
-    expect(importBackup(data, older, false).homeBookIds).toEqual(["enemy", "shots"]);
+    expect(homeBooks(restored).map((book) => book.id)).toEqual(
+      restored.items.slice(0, 3).map((book) => book.id),
+    );
+    const data = { ...initialData(), homeBookIds: ["conversation", "phrases"] };
+    expect(importBackup(initialData(), backup(data), true).homeBookIds).toEqual(
+      ["conversation", "phrases"],
+    );
+    expect(importBackup(data, older, false).homeBookIds).toEqual([
+      "conversation",
+      "phrases",
+    ]);
   });
   it("removes deleted books and falls back when the whole selection is gone", () => {
-    let data = { ...initialData(), homeBookIds: ["enemy", "shots"] };
-    data = resetBook(data, "enemy", true) as typeof data;
-    expect(homeBooks(data).map((book) => book.id)).toEqual(["shots"]);
-    data = resetBook(data, "shots", true) as typeof data;
-    expect(homeBooks(data).map((book) => book.id)).toEqual(data.items.slice(0, 3).map((book) => book.id));
+    let data = { ...initialData(), homeBookIds: ["conversation", "phrases"] };
+    data = resetBook(data, "conversation", true) as typeof data;
+    expect(homeBooks(data).map((book) => book.id)).toEqual(["phrases"]);
+    data = resetBook(data, "phrases", true) as typeof data;
+    expect(homeBooks(data).map((book) => book.id)).toEqual(
+      data.items.slice(0, 3).map((book) => book.id),
+    );
     expect(homeBooks({ ...data, items: [] })).toEqual([]);
   });
   it("normalizes stale or duplicate IDs and rejects a malformed preference", () => {
-    const value = backup({ ...initialData(), homeBookIds: ["missing", "shots", "shots", "enemy", "demons", "core"] });
-    expect(importBackup(initialData(), value, true).homeBookIds).toEqual(["shots", "enemy", "demons"]);
-    expect(() => validateBackup({ ...value, homeBookIds: "enemy" })).toThrow(/homeBookIds/);
+    const value = backup({
+      ...initialData(),
+      homeBookIds: [
+        "missing",
+        "phrases",
+        "phrases",
+        "conversation",
+        "reading",
+        "core",
+      ],
+    });
+    expect(importBackup(initialData(), value, true).homeBookIds).toEqual([
+      "phrases",
+      "conversation",
+      "reading",
+    ]);
+    expect(() =>
+      validateBackup({ ...value, homeBookIds: "conversation" }),
+    ).toThrow(/homeBookIds/);
   });
 });
 
 describe("existing learning behavior", () => {
-  it("keeps all seed books including Viva La Vida", () => {
-    expect(initialData().items).toHaveLength(9);
+  it("provides four original demo books", () => {
+    expect(initialData().items.map((book) => book.id)).toEqual([
+      "reading",
+      "conversation",
+      "core",
+      "phrases",
+    ]);
     expect(
-      initialData().items.find((book) => book.id === "viva-la-vida")!.units
-        .length,
-    ).toBeGreaterThan(10);
-    expect(initialData().items.find((book) => book.id === "demons")!.units).toHaveLength(36);
-    expect(initialData().items.find((book) => book.id === "enemy")!.units).toHaveLength(55);
+      initialData().items.every((book) => book.author === "Gatsby · 原创示例"),
+    ).toBe(true);
   });
   it("normalizes capitalization, apostrophes and punctuation", () => {
     expect(normalizeAnswer(" Hold-something / dear! ")).toBe(
@@ -166,64 +190,63 @@ describe("existing learning behavior", () => {
   });
 });
 describe("migration and persistence", () => {
-  it("adds the new The Line seed book once to an existing Gatsby state", () => {
+  it("preserves private imported content and progress when the public catalog changes", () => {
     const storage = memory();
-    const existing = initialData();
-    existing.items = existing.items.filter((book) => book.id !== "the-line");
-    saveData(storage, existing);
-    const loaded = loadData(storage);
-    expect(loaded.data.items.some((book) => book.id === "the-line")).toBe(true);
-    expect(loaded.data.items.find((book) => book.id === "the-line")!.units).toHaveLength(26);
-    const second = loadData(storage);
-    expect(second.data.items.filter((book) => book.id === "the-line")).toHaveLength(1);
-  });
-  it("adds the Shots seed book once to an existing Gatsby state", () => {
-    const storage = memory();
-    const existing = initialData();
-    existing.items = existing.items.filter((book) => book.id !== "shots");
-    saveData(storage, existing);
-    const loaded = loadData(storage);
-    expect(loaded.data.items.find((book) => book.id === "shots")!.units).toHaveLength(30);
-    expect(storage.getItem(SHOTS_SEED_MIGRATION_KEY)).not.toBeNull();
-  });
-  it("adds Demons and Enemy seed books once to an existing Gatsby state", () => {
-    const storage = memory();
-    const existing = initialData();
-    existing.items = existing.items.filter(
-      (book) => book.id !== "demons" && book.id !== "enemy",
+    const data = feedback(roundData(), "remembered");
+    const privateBook = {
+      ...data.items[0],
+      id: "private-import",
+      title: "My private notes",
+      units: [data.items[0].units[0]],
+    };
+    data.items.push(privateBook);
+    saveData(storage, data);
+    storage.setItem(SEED_CATALOG_MIGRATION_KEY, JSON.stringify(["core"]));
+    const loaded = loadData(storage).data;
+    expect(loaded.items.find((book) => book.id === "private-import")).toEqual(
+      privateBook,
     );
-    saveData(storage, existing);
-    const loaded = loadData(storage);
-    expect(loaded.data.items.find((book) => book.id === "demons")!.units).toHaveLength(36);
-    expect(loaded.data.items.find((book) => book.id === "enemy")!.units).toHaveLength(55);
-    expect(storage.getItem(DEMONS_SEED_MIGRATION_KEY)).not.toBeNull();
-    expect(storage.getItem(ENEMY_SEED_MIGRATION_KEY)).not.toBeNull();
-    expect(loadData(storage).data.items.filter((book) => ["demons", "enemy"].includes(book.id))).toHaveLength(2);
+    expect(loaded.logs).toEqual(data.logs);
+    expect(loaded.schedule).toEqual(data.schedule);
+    expect(loaded.round).toEqual(data.round);
+    expect(
+      loadData(storage).data.items.filter(
+        (book) => book.id === "private-import",
+      ),
+    ).toHaveLength(1);
   });
   it("automatically adds future seed books without another migration constant", () => {
     const storage = memory();
     const existing = initialData();
-    existing.items = existing.items.filter((book) => book.id !== "viva-la-vida");
+    existing.items = existing.items.filter((book) => book.id !== "reading");
     saveData(storage, existing);
     storage.setItem(
       SEED_CATALOG_MIGRATION_KEY,
       JSON.stringify(
         initialData()
-          .items.filter((book) => book.id !== "viva-la-vida")
+          .items.filter((book) => book.id !== "reading")
           .map((book) => book.id),
       ),
     );
     const loaded = loadData(storage);
-    expect(loaded.data.items.find((book) => book.id === "viva-la-vida")!.units).toHaveLength(30);
-    expect(loadData(storage).data.items.filter((book) => book.id === "viva-la-vida")).toHaveLength(1);
+    expect(
+      loaded.data.items.find((book) => book.id === "reading")!.units,
+    ).toHaveLength(4);
+    expect(
+      loadData(storage).data.items.filter((book) => book.id === "reading"),
+    ).toHaveLength(1);
   });
   it("does not restore a known seed book after the user removes it", () => {
     const storage = memory();
     const existing = initialData();
-    existing.items = existing.items.filter((book) => book.id !== "viva-la-vida");
+    existing.items = existing.items.filter((book) => book.id !== "reading");
     saveData(storage, existing);
+    storage.setItem(
+      SEED_CATALOG_MIGRATION_KEY,
+      JSON.stringify(initialData().items.map((book) => book.id)),
+    );
     const loaded = loadData(storage);
-    expect(loaded.data.items.some((book) => book.id === "viva-la-vida")).toBe(false);
+    expect(loaded.data.items.some((book) => book.id === "reading")).toBe(false);
     expect(storage.getItem(SEED_CATALOG_MIGRATION_KEY)).not.toBeNull();
   });
   it("migrates legacy answered cards, settings and logs without modifying legacy keys", () => {
@@ -365,8 +388,8 @@ describe("content and statistics", () => {
   it("deletes only the requested book and related records", () => {
     const data = feedback(roundData(), "remembered");
     const next = resetBook(data, "core", true);
-    expect(next.items).toHaveLength(8);
-    expect(next.items.some((book) => book.id === "viva-la-vida")).toBe(true);
+    expect(next.items).toHaveLength(3);
+    expect(next.items.some((book) => book.id === "reading")).toBe(true);
     expect(next.logs).toHaveLength(0);
     expect(next.round).toBeNull();
   });

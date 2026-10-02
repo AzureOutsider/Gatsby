@@ -1,0 +1,39 @@
+{
+  "id": "phrases",
+  "title": "Phrases in Practice",
+  "type": "单词书",
+  "author": "Gatsby · 原创示例",
+  "level": "入门",
+  "progress": 0,
+  "description": "从原创生活场景中练习固定搭配。",
+  "units": [
+    {
+      "kind": "短语",
+      "prompt": "look forward to",
+      "answer": "期待",
+      "context": "I look forward to visiting your new studio.",
+      "note": "to 是介词，后接名词或动名词。"
+    },
+    {
+      "kind": "短语",
+      "prompt": "take a break",
+      "answer": "休息一下",
+      "context": "Let us take a break after this exercise.",
+      "note": ""
+    },
+    {
+      "kind": "短语",
+      "prompt": "make progress",
+      "answer": "取得进步",
+      "context": "Regular practice helps us make progress.",
+      "note": "progress 在此为不可数名词。"
+    },
+    {
+      "kind": "短语",
+      "prompt": "keep in mind",
+      "answer": "记住；牢记",
+      "context": "Keep the opening hours in mind when planning your visit.",
+      "note": ""
+    }
+  ]
+}

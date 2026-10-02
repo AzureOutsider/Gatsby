@@ -1,0 +1,32 @@
+{
+  "id": "conversation",
+  "title": "Everyday Conversation",
+  "type": "影视台词",
+  "author": "Gatsby · 原创示例",
+  "level": "入门",
+  "progress": 0,
+  "description": "原创日常对话示例，不摘录影视字幕。",
+  "units": [
+    {
+      "kind": "句子",
+      "prompt": "Could you repeat that?",
+      "answer": "你能再说一遍吗？",
+      "context": "Could you repeat that? I missed the street name.",
+      "note": "Could you ...? 是礼貌请求。"
+    },
+    {
+      "kind": "句子",
+      "prompt": "That sounds good.",
+      "answer": "听起来不错。",
+      "context": "A walk after lunch? That sounds good.",
+      "note": "sound + 形容词表示听起来如何。"
+    },
+    {
+      "kind": "句子",
+      "prompt": "Let me check.",
+      "answer": "让我确认一下。",
+      "context": "Let me check the timetable before we leave.",
+      "note": "let + 宾语 + 动词原形。"
+    }
+  ]
+}

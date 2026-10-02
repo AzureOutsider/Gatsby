@@ -11,3 +11,16 @@ Thumbs.db
 node_modules/
 web-dist/
 *.tsbuildinfo
+
+# Local credentials, personal content, reports and backups
+.env
+.env.*
+!.env.example
+.private/
+.venv-build/
+personal/
+backups/
+*.log
+*.bundle
+gatsby-backup-*.json
+gatsby-diagnostic-*.json

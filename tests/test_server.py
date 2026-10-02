@@ -56,9 +56,9 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 404)
 
     def test_artwork_is_local(self):
-        with urlopen(self.url + "/gatsby-logo.webp") as response:
-            self.assertIn("image/", response.headers["Content-Type"])
-            self.assertGreater(len(response.read()), 1000)
+        with urlopen(self.url + "/gatsby-logo.svg") as response:
+            self.assertEqual(response.headers["Content-Type"], "image/svg+xml")
+            self.assertIn(b'<svg xmlns="http://www.w3.org/2000/svg"', response.read())
 
 
 if __name__ == "__main__":
