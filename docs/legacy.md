@@ -5,8 +5,8 @@
 在独立目录运行旧版，避免覆盖正在使用的 Gatsby：
 
 ```bash
-git clone --branch legacy/english-study --single-branch https://github.com/AzureOutsider/EnglishStudy.git EnglishStudy-legacy
-cd EnglishStudy-legacy
+git clone --branch legacy/english-study --single-branch https://github.com/AzureOutsider/Gatsby.git Gatsby-legacy
+cd Gatsby-legacy
 python server.py
 ```
 

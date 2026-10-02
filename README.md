@@ -11,8 +11,8 @@
 使用 Node.js 22.12+（22.x）或 24+；推荐 Node.js 22 LTS，仓库提供 `.nvmrc`。
 
 ```bash
-git clone https://github.com/AzureOutsider/EnglishStudy.git
-cd EnglishStudy
+git clone https://github.com/AzureOutsider/Gatsby.git
+cd Gatsby
 npm ci
 npm run dev
 ```
